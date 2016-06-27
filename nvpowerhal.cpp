@@ -350,7 +350,7 @@ void common_power_set_interactive(__attribute__ ((unused)) struct power_module *
 #ifdef POWER_MODE_SET_INTERACTIVE // Tegra X1
     if (on) {
         power_mode = get_system_power_mode();
-        if (power_mode < 0 || power_mode >= sizeof(interactive_data_array)/sizeof(interactive_data_array[0]) {
+        if (power_mode < 0 || power_mode >= sizeof(interactive_data_array)/sizeof(interactive_data_array[0])) {
             ALOGV("%s: no system power mode info, take optimized settings", __func__);
             power_mode = 0;
         }
