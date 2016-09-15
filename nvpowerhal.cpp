@@ -515,6 +515,9 @@ void common_power_hint(__attribute__ ((unused)) struct power_module *module, str
                                                 PM_QOS_DEFAULT_VALUE,
                                                 512000,
                                                 s2ns(1));
+        pInfo->mTimeoutPoker->requestPmQosTimed("/dev/emc_freq_min",
+                                                 300000,
+                                                 s2ns(1));
         break;
     case POWER_HINT_LOW_POWER:
 #ifdef POWER_MODE_SET_INTERACTIVE
