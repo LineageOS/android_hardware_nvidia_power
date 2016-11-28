@@ -26,12 +26,12 @@ LOCAL_CFLAGS += -DENABLE_SATA_STANDBY_MODE
 endif
 
 # Any devices with a old interactive governor
-ifneq ($(filter roth,$(TARGET_DEVICE)),)
+ifeq ($(TARGET_TEGRA_VERSION),t114)
     LOCAL_CFLAGS += -DPOWER_MODE_LEGACY
 endif
 
 # Currently used only for T210 devices
-ifneq ($(filter foster,$(TARGET_DEVICE)),)
+ifeq ($(TARGET_TEGRA_VERSION),t210)
     LOCAL_CFLAGS += -DPOWER_MODE_SET_INTERACTIVE
 endif
 
