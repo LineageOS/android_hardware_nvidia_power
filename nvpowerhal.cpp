@@ -260,7 +260,6 @@ void common_power_open(struct powerhal_info *pInfo)
     // interaction.
     pInfo->hint_interval[POWER_HINT_INTERACTION] = 90000;
     pInfo->hint_interval[POWER_HINT_CPU_BOOST] = 500000;
-    pInfo->hint_interval[POWER_HINT_AUDIO] = 500000;
     pInfo->hint_interval[POWER_HINT_LOW_POWER] = 0;
 
     // Initialize features
@@ -507,17 +506,6 @@ void common_power_hint(__attribute__ ((unused)) struct power_module *module, str
         pInfo->mTimeoutPoker->requestPmQosTimed("/dev/emc_freq_min",
                                                 792000,
                                                 ms2ns(1500));
-        break;
-    case POWER_HINT_AUDIO:
-        // Boost to 512 Mhz frequency for one second
-        pInfo->mTimeoutPoker->requestPmQosTimed(PMQOS_CONSTRAINT_CPU_FREQ,
-                                                PM_QOS_BOOST_PRIORITY,
-                                                PM_QOS_DEFAULT_VALUE,
-                                                512000,
-                                                s2ns(1));
-        pInfo->mTimeoutPoker->requestPmQosTimed("/dev/emc_freq_min",
-                                                 300000,
-                                                 s2ns(1));
         break;
     case POWER_HINT_LOW_POWER:
 #ifdef POWER_MODE_SET_INTERACTIVE
