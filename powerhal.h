@@ -30,7 +30,7 @@
 #define MAX_CHARS 32
 #define MAX_INPUT_DEV_COUNT 12
 #define MAX_USE_CASE_STRING_SIZE 80
-#define MAX_POWER_HINT_COUNT POWER_HINT_SET_PROFILE
+#define MAX_POWER_HINT_COUNT POWER_HINT_SET_PROFILE+1
 
 #define CAMERA_TARGET_FPS 30
 #define DEFAULT_MIN_ONLINE_CPUS     2
@@ -94,6 +94,15 @@ typedef struct interactive_data {
     const char *min_sample_time;
     const char *go_hispeed_load;
 } interactive_data_t;
+
+enum {
+    PROFILE_POWER_SAVE,
+    PROFILE_BALANCED,
+    PROFILE_HIGH_PERFORMANCE,
+    PROFILE_BIAS_POWER,
+    PROFILE_BIAS_PERFORMANCE,
+    PROFILE_MAX
+};
 
 typedef int (*sendhints_fn_t)(uint32_t client_tag, ...);
 typedef void (*cancelhints_fn_t)(uint32_t usecase, uint32_t client_tag);
