@@ -319,8 +319,20 @@ static void shield_power_hint(struct power_module *module, power_hint_t hint,
     common_power_hint(module, pInfo, hint, data);
 }
 
+static void shield_set_feature(__attribute__ ((unused)) struct power_module *module, feature_t feature, __attribute__ ((unused)) int state)
+{
+    switch (feature) {
+    case POWER_FEATURE_DOUBLE_TAP_TO_WAKE:
+        ALOGW("Double tap to wake is not supported\n");
+        break;
+    default:
+        ALOGW("Error setting the feature, it doesn't exist %d\n", feature);
+        break;
+    }
+}
+
 static int shield_power_open(__attribute__ ((unused)) const hw_module_t *module, const char *name,
-                          __attribute__ ((unused)) hw_device_t **device)
+                          hw_device_t **device)
 {
     if (strcmp(name, POWER_HARDWARE_MODULE_ID))
         return -EINVAL;
@@ -332,19 +344,26 @@ static int shield_power_open(__attribute__ ((unused)) const hw_module_t *module,
         common_power_camera_init(pInfo, camera_cap);
     }
 
-    return 0;
-}
+    power_module_t *dev = (power_module_t *)calloc(1,
+            sizeof(power_module_t));
 
-static void shield_set_feature(__attribute__ ((unused)) struct power_module *module, feature_t feature, __attribute__ ((unused)) int state)
-{
-    switch (feature) {
-    case POWER_FEATURE_DOUBLE_TAP_TO_WAKE:
-        ALOGW("Double tap to wake is not supported\n");
-        break;
-    default:
-        ALOGW("Error setting the feature, it doesn't exist %d\n", feature);
-        break;
+    if (!dev) {
+        ALOGD("%s: failed to allocate memory", __FUNCTION__);
+        return -ENOMEM;
     }
+
+    dev->common.tag = HARDWARE_MODULE_TAG;
+    dev->common.module_api_version = POWER_MODULE_API_VERSION_0_2;
+    dev->common.hal_api_version = HARDWARE_HAL_API_VERSION;
+
+    dev->init = shield_power_init;
+    dev->powerHint = shield_power_hint;
+    dev->setInteractive = shield_power_set_interactive;
+    dev->setFeature = shield_set_feature;
+
+    *device = (hw_device_t*)dev;
+
+    return 0;
 }
 
 static struct hw_module_methods_t power_module_methods = {
