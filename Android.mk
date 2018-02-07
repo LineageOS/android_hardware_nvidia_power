@@ -37,6 +37,8 @@ endif
 
 LOCAL_MODULE_RELATIVE_PATH := hw
 
+LOCAL_PROPRIETARY_MODULE := true
+
 LOCAL_SHARED_LIBRARIES := liblog libcutils libutils libdl
 
 LOCAL_MODULE := power.$(TARGET_BOARD_PLATFORM)
