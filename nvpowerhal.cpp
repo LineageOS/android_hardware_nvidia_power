@@ -1024,7 +1024,8 @@ static void set_interactive_governor(int mode)
 
 static void set_power_mode_hint(struct powerhal_info *pInfo, int *data)
 {
-    int mode = data[0];
+    int map[] = {NVCPL_HINT_BAT_SAVE, NVCPL_HINT_OPT_PERF, NVCPL_HINT_MAX_PERF, NVCPL_HINT_BIAS_SAVE, NVCPL_HINT_BIAS_PERF};
+    int mode = *data;
     int status;
     char value[4] = { 0 };
 
@@ -1040,7 +1041,7 @@ static void set_power_mode_hint(struct powerhal_info *pInfo, int *data)
 
     if (status)
     {
-        set_interactive_governor(mode);
+        set_interactive_governor(map[mode]);
     }
 
 }
@@ -1093,11 +1094,11 @@ void common_power_hint(struct power_module *module, struct powerhal_info *pInfo,
                                                 792000,
                                                 ms2ns(1500));
         break;
-    case POWER_HINT_SET_PROFILE:
+    /*case POWER_HINT_APP_PROFILE:
         if (data) {
-            //app_profile_set(pInfo, (app_profile_knob*)data);
+            app_profile_set(pInfo, (app_profile_knob*)data);
         }
-        break;
+        break;*/
     /*case POWER_HINT_SHIELD_STREAMING:
         // set minimum 2 CPU core
         pInfo->mTimeoutPoker->requestPmQosTimed(PMQOS_CONSTRAINT_ONLINE_CPUS,
@@ -1203,10 +1204,16 @@ void common_power_hint(struct power_module *module, struct powerhal_info *pInfo,
                                                  300000,
                                                  s2ns(1));
         break;*/
-    case POWER_HINT_LOW_POWER:
+    case POWER_HINT_SET_PROFILE:
 #ifdef POWER_MODE_SET_INTERACTIVE
         // Set interactive governor parameters according to power mode
-        set_power_mode_hint(pInfo, (int *)data);
+        set_power_mode_hint(pInfo, (int32_t *)data);
+#endif
+        break;
+    case POWER_HINT_LOW_POWER:
+#ifdef POWER_MODE_SET_INTERACTIVE
+        int new_state = (data ? PROFILE_POWER_SAVE : PROFILE_BALANCED);
+        set_power_mode_hint(pInfo, &new_state);
 #endif
         break;
     default:

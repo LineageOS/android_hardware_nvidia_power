@@ -319,6 +319,19 @@ static void shield_power_hint(struct power_module *module, power_hint_t hint,
     common_power_hint(module, pInfo, hint, data);
 }
 
+static int shield_get_feature(__attribute__ ((unused)) struct power_module *module, feature_t feature)
+{
+    switch (feature) {
+    case POWER_FEATURE_SUPPORTED_PROFILES:
+        return PROFILE_MAX;
+        break;
+    default:
+        ALOGW("Error getting the feature, it doesn't exist %d\n", feature);
+        return -1;
+        break;
+    }
+}
+
 static void shield_set_feature(__attribute__ ((unused)) struct power_module *module, feature_t feature, __attribute__ ((unused)) int state)
 {
     switch (feature) {
@@ -360,6 +373,7 @@ static int shield_power_open(__attribute__ ((unused)) const hw_module_t *module,
     dev->powerHint = shield_power_hint;
     dev->setInteractive = shield_power_set_interactive;
     dev->setFeature = shield_set_feature;
+    dev->getFeature = shield_get_feature;
 
     *device = (hw_device_t*)dev;
 
@@ -387,4 +401,5 @@ struct power_module HAL_MODULE_INFO_SYM = {
     setInteractive: shield_power_set_interactive,
     powerHint: shield_power_hint,
     setFeature: shield_set_feature,
+    getFeature: shield_get_feature,
 };
