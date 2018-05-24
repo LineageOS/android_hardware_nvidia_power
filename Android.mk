@@ -30,8 +30,7 @@ ifeq ($(TARGET_TEGRA_VERSION),t114)
     LOCAL_CFLAGS += -DPOWER_MODE_LEGACY
 endif
 
-# Currently used only for T210 devices
-ifeq ($(TARGET_TEGRA_VERSION),t210)
+ifneq ($(filter $(TARGET_DEVICE), t210 t186),)
     LOCAL_CFLAGS += -DPOWER_MODE_SET_INTERACTIVE
 endif
 
