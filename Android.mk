@@ -18,8 +18,6 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES := nvpowerhal.cpp timeoutpoker.cpp power.cpp powerhal_utils.cpp tegra_sata_hal.cpp
-
 # This is only for devices that can contain a sata hard drive, currently only foster
 ifneq ($(filter foster,$(TARGET_DEVICE)),)
 LOCAL_CFLAGS += -DENABLE_SATA_STANDBY_MODE
@@ -34,16 +32,31 @@ ifneq ($(filter $(TARGET_DEVICE), t210 t186),)
     LOCAL_CFLAGS += -DPOWER_MODE_SET_INTERACTIVE
 endif
 
+LOCAL_SRC_FILES := \
+    nvpowerhal.cpp \
+    timeoutpoker.cpp \
+    powerhal.cpp \
+    powerhal_utils.cpp \
+    tegra_sata_hal.cpp \
+    Power.cpp \
+    service.cpp
+
+LOCAL_SHARED_LIBRARIES := \
+    liblog \
+    libcutils \
+    libdl \
+    libhidlbase \
+    libhidltransport \
+    libhardware \
+    libutils \
+    android.hardware.power@1.0
+
+LOCAL_MODULE := android.hardware.power@1.0-service-nvidia
+LOCAL_INIT_RC := android.hardware.power@1.0-service-nvidia.rc
 LOCAL_MODULE_RELATIVE_PATH := hw
-
-LOCAL_PROPRIETARY_MODULE := true
-
-LOCAL_SHARED_LIBRARIES := liblog libcutils libutils libdl
-
-LOCAL_MODULE := power.$(TARGET_BOARD_PLATFORM)
-
 LOCAL_MODULE_TAGS := optional
-
-include $(BUILD_SHARED_LIBRARY)
+LOCAL_VENDOR_MODULE := true
+LOCAL_MODULE_OWNER := nvidia
+include $(BUILD_EXECUTABLE)
 
 endif # TARGET_POWERHAL_VARIANT == tegra

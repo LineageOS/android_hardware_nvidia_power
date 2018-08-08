@@ -32,12 +32,10 @@
 #define MAX_USE_CASE_STRING_SIZE 80
 #define MAX_POWER_HINT_COUNT POWER_HINT_SET_PROFILE+1
 
-#define CAMERA_TARGET_FPS 30
 #define DEFAULT_MIN_ONLINE_CPUS     2
 #define DEFAULT_MAX_ONLINE_CPUS     0
 #define DEFAULT_FREQ                700
 
-#define CAMERA_TARGET_FPS 30
 #define POWER_CAP_PROP "persist.sys.NV_PBC_PWR_LIMIT"
 #define SLEEP_INTERVAL_SECS 1
 
@@ -64,26 +62,6 @@ struct input_dev_map {
     int dev_id;
     const char* dev_name;
 };
-
-typedef enum camera_usecase {
-    CAMERA_STILL_PREVIEW = 0,
-    CAMERA_VIDEO_PREVIEW,
-    CAMERA_VIDEO_RECORD,
-    CAMERA_VIDEO_RECORD_HIGH_FPS,
-    CAMERA_USECASE_COUNT
-} camera_usecase_t;
-
-typedef struct camera_cap {
-    int min_online_cpus;
-    int max_online_cpus;
-    int freq;
-    int minFreq;
-    int minCpuHint;
-    int maxCpuHint;
-    int minGpuHint;
-    int maxGpuHint;
-    int fpsHint;
-} camera_cap_t;
 
 typedef struct interactive_data {
     const char *hispeed_freq;
@@ -134,64 +112,10 @@ struct powerhal_info {
     uint64_t hint_time[MAX_POWER_HINT_COUNT];
     uint64_t hint_interval[MAX_POWER_HINT_COUNT];
 
-    /* waiting condvar regular hints thread */
-    pthread_cond_t wait_cond;
-
-    /* waiting mutex regular hints thread */
-    pthread_mutex_t wait_mutex;
-
-    /* regular hints thread handle */
-    pthread_t regular_hints_thread;
-
-    /* regular hints thread handle */
-    bool exit_hints_thread;
-
-    /* AppProfile defaults */
-    struct {
-        int min_freq;
-        int max_freq;
-        int core_cap;
-        int gpu_cap;
-        int fan_cap;
-        int power_cap;
-    } defaults;
-
-    /* Features on platform */
-    struct {
-        bool fan;
-    } features;
-
     /* File descriptors used for hints and app profiles */
     struct {
-        int app_min_freq;
-        int app_max_freq;
-        int app_max_online_cpus;
-        int app_min_online_cpus;
-        int app_max_gpu;
-        int app_min_gpu;
         int vsync_min_cpu;
     } fds;
-
-    /* Camera power hint struct*/
-    struct {
-        /* handle for dynamic loaded library */
-        void *handle;
-        /* File descriptor used to set GPU target FPS */
-        int fd_gpu;
-        /* File descriptor used to set CPU min frequency */
-        int fd_cpu_freq_min;
-        /* File descriptor used to set CPU max frequency */
-        int fd_cpu_freq_max;
-        /* File descriptor used to set min CPUs online */
-        int fd_min_online_cpus;
-        /* File descriptor used to set max CPUs online */
-        int fd_max_online_cpus;
-
-        int target_fps;
-
-        camera_cap_t *cam_cap;
-        int usecase_index;
-    } camera_power;
 
     /* PHS hint function pointers. Loaded in runtime since powerhal can't
      * depend on libphs in link time. */
@@ -209,7 +133,7 @@ void common_power_open(struct powerhal_info *pInfo);
 /* Power management setup action at startup.
  * Such as to set default cpufreq parameters.
  */
-void common_power_init(struct power_module *module, struct powerhal_info *pInfo);
+void common_power_init(struct powerhal_info *pInfo);
 
 /* Power management action,
  * upon the system entering interactive state and ready for interaction,
@@ -217,21 +141,16 @@ void common_power_init(struct power_module *module, struct powerhal_info *pInfo)
  * OR
  * non-interactive state the system appears asleep, displayi/touch usually turned off.
 */
-void common_power_set_interactive(struct power_module *module,
-                                    struct powerhal_info *pInfo, int on);
+void common_power_set_interactive(struct powerhal_info *pInfo, int on);
 
 /* PowerHint called to pass hints on power requirements, which
  * may result in adjustment of power/performance parameters of the
  * cpufreq governor and other controls.
 */
-void common_power_hint(struct power_module *module, struct powerhal_info *pInfo,
+void common_power_hint(struct powerhal_info *pInfo,
                             power_hint_t hint, void *data);
 
-/*
- * Initialize struct camera_power. Copy platform dependent CPU config to
- * cam_cap in struct camera_power.
- */
-void common_power_camera_init(struct powerhal_info *pInfo, camera_cap_t *cap);
+void set_power_level_floor(int on);
 
 #endif  //COMMON_POWER_HAL_H
 
