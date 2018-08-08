@@ -19,12 +19,7 @@
 #include "powerhal.h"
 #include <pthread.h>
 #include <sys/prctl.h>
-#ifdef ENABLE_SATA_STANDBY_MODE
-#include "tegra_sata_hal.h"
-#endif
 
-#define FOSTER_E_HDD    "/dev/block/sda"
-#define HDD_STANDBY_TIMEOUT     60
 #define BRICK_STATE_PROP "persist.power.brick"
 #define CPU_CC_STATE_NODE "/sys/kernel/debug/cpuidle_t210/fast_cluster_states_enable"
 #define CPU_CC_IDLE 0x1
@@ -55,42 +50,6 @@
 #define WIFI_PM_ENABLE "pm_enable"
 #define WIFI_PM_DISABLE "pm_disable"
 
-static struct powerhal_info *pInfo;
-static struct input_dev_map input_devs[] = {
-        {-1, "raydium_ts\n"},
-        {-1, "touch\n"},
-       };
-
-/*
- * The order in camera_cap array should match with
- * use case order in camera_usecase_t.
- * if min_online_cpus or max_online_cpus is zero, then
- * it won't be applied.
- * Freq is in KHz.
- */
-static camera_cap_t camera_cap[] = {
-    /* still preview
-     * {min_online_cpus, max_online_cpus, freq, minFreq,
-     *  minCpuHint, maxCpuHint, minGpuHint, maxGpuHint, fpsHint}
-    */
-    {0, 0, 0, 0, 0, 0, 0, 0, 0},
-    /* video preview
-     * {min_online_cpus, max_online_cpus, freq, minFreq,
-     *  minCpuHint, maxCpuHint, minGpuHint, maxGpuHint, fpsHint}
-    */
-    {0, 0, 0, 0, 0, 0, 0, 0, 0},
-    /* video record
-     * {min_online_cpus, max_online_cpus, freq, minFreq,
-     *  minCpuHint, maxCpuHint, minGpuHint, maxGpuHint, fpsHint}
-    */
-    {0, 0, 0, 0, 0, 0, 0, 0, 0},
-    /* high fps video record
-     * {min_online_cpus, max_online_cpus, freq, minFreq,
-     *  minCpuHint, maxCpuHint, minGpuHint, maxGpuHint, fpsHint}
-    */
-    {0, 0, 0, 0, 0, 0, 0, 0, 0},
-};
-
 static bool booting;
 /* Array of range for bricks, except first value */
 static char brick_whitelist[][7] = {
@@ -112,7 +71,7 @@ static bool wait_for_gpu_sysfs()
     return true;
 }
 
-static bool wait_for_gpu_ready(bool on)
+static bool wait_for_gpu_ready(__attribute__ ((unused)) bool on)
 {
     char buf[4];
 
@@ -234,7 +193,7 @@ static bool is_brick_whitelisted(char * brick)
     return false;
 }
 
-static void set_power_level_floor(int on)
+void set_power_level_floor(int on)
 {
     char brick[PROPERTY_VALUE_MAX+1];
     char platform[PROPERTY_VALUE_MAX+1];
@@ -274,132 +233,3 @@ static void set_power_level_floor(int on)
     sysfs_write_int(SOC_DISABLE_DVFS_NODE, 1);
     set_gpu_knobs(0);
 }
-
-static void shield_power_init(struct power_module *module)
-{
-    if (!pInfo)
-        pInfo = (powerhal_info*)malloc(sizeof(powerhal_info));
-    pInfo->input_devs = input_devs;
-    pInfo->input_cnt = sizeof(input_devs)/sizeof(struct input_dev_map);
-
-    booting = 1;
-    common_power_init(module, pInfo);
-}
-
-static void shield_power_set_interactive(struct power_module *module, int on)
-{
-    int error = 0;
-
-    common_power_set_interactive(module, pInfo, on);
-    set_power_level_floor(on);
-
-#ifdef ENABLE_SATA_STANDBY_MODE
-    if (!access(FOSTER_E_HDD, F_OK)) {
-        /*
-        * Turn-off Foster HDD at display off
-        */
-        ALOGI("HAL: Display is %s, set HDD to %s standby mode.", on?"on":"off", on?"disable":"enter");
-        if (on) {
-            error = hdd_disable_standby_timer();
-            if (error)
-                ALOGE("HAL: Failed to set standby timer, error: %d", error);
-        }
-        else {
-            error = hdd_set_standby_timer(HDD_STANDBY_TIMEOUT);
-            if (error)
-                ALOGE("HAL: Failed to set standby timer, error: %d", error);
-        }
-    }
-#endif
-}
-
-static void shield_power_hint(struct power_module *module, power_hint_t hint,
-                            void *data)
-{
-    common_power_hint(module, pInfo, hint, data);
-}
-
-static int shield_get_feature(__attribute__ ((unused)) struct power_module *module, feature_t feature)
-{
-    switch (feature) {
-    case POWER_FEATURE_SUPPORTED_PROFILES:
-        return PROFILE_MAX;
-        break;
-    default:
-        ALOGW("Error getting the feature, it doesn't exist %d\n", feature);
-        return -1;
-        break;
-    }
-}
-
-static void shield_set_feature(__attribute__ ((unused)) struct power_module *module, feature_t feature, __attribute__ ((unused)) int state)
-{
-    switch (feature) {
-    case POWER_FEATURE_DOUBLE_TAP_TO_WAKE:
-        ALOGW("Double tap to wake is not supported\n");
-        break;
-    default:
-        ALOGW("Error setting the feature, it doesn't exist %d\n", feature);
-        break;
-    }
-}
-
-static int shield_power_open(__attribute__ ((unused)) const hw_module_t *module, const char *name,
-                          hw_device_t **device)
-{
-    if (strcmp(name, POWER_HARDWARE_MODULE_ID))
-        return -EINVAL;
-
-    if (!pInfo) {
-        pInfo = (powerhal_info*)calloc(1, sizeof(powerhal_info));
-
-        common_power_open(pInfo);
-        common_power_camera_init(pInfo, camera_cap);
-    }
-
-    power_module_t *dev = (power_module_t *)calloc(1,
-            sizeof(power_module_t));
-
-    if (!dev) {
-        ALOGD("%s: failed to allocate memory", __FUNCTION__);
-        return -ENOMEM;
-    }
-
-    dev->common.tag = HARDWARE_MODULE_TAG;
-    dev->common.module_api_version = POWER_MODULE_API_VERSION_0_2;
-    dev->common.hal_api_version = HARDWARE_HAL_API_VERSION;
-
-    dev->init = shield_power_init;
-    dev->powerHint = shield_power_hint;
-    dev->setInteractive = shield_power_set_interactive;
-    dev->setFeature = shield_set_feature;
-    dev->getFeature = shield_get_feature;
-
-    *device = (hw_device_t*)dev;
-
-    return 0;
-}
-
-static struct hw_module_methods_t power_module_methods = {
-    open: shield_power_open,
-};
-
-struct power_module HAL_MODULE_INFO_SYM = {
-    common: {
-        tag: HARDWARE_MODULE_TAG,
-        module_api_version: POWER_MODULE_API_VERSION_0_2,
-        hal_api_version: HARDWARE_HAL_API_VERSION,
-        id: POWER_HARDWARE_MODULE_ID,
-        name: "Shield Power HAL",
-        author: "The LineageOS Project",
-        methods: &power_module_methods,
-        dso: NULL,
-        reserved: {0},
-    },
-
-    init: shield_power_init,
-    setInteractive: shield_power_set_interactive,
-    powerHint: shield_power_hint,
-    setFeature: shield_set_feature,
-    getFeature: shield_get_feature,
-};

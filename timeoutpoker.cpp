@@ -188,10 +188,8 @@ int TimeoutPoker::PokeHandler::generateNewKey(void)
     return mKey++;
 }
 
-TimeoutPoker::PokeHandler::PokeHandler(TimeoutPoker* poker, Barrier* readyToRun) :
-    mPoker(poker),
-    mKey(0),
-    mSpamRefresh(false)
+TimeoutPoker::PokeHandler::PokeHandler(__attribute__ ((unused)) TimeoutPoker* poker, Barrier* readyToRun) :
+    mKey(0)
 {
     mWorker = new LooperThread(readyToRun);
     mWorker->run("TimeoutPoker::PokeHandler::LooperThread", PRIORITY_FOREGROUND);
