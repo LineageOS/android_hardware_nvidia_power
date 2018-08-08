@@ -33,7 +33,7 @@
 
 using namespace android;
 
-static int createConstraintCommand(char* command, int size, int priority, int max, int min);
+int createConstraintCommand(char* command, int size, int priority, int max, int min);
 
 class TimeoutPoker {
 private:
@@ -218,10 +218,8 @@ private:
         int openPmQosNode(const char* filename, int prioirity, int max, int min);
 
     private:
-        TimeoutPoker* mPoker;
         int mKey;
 
-        bool mSpamRefresh;
         mutable Mutex mEvLock;
     };
 
