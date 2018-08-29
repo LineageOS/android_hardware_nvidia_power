@@ -49,7 +49,8 @@ LOCAL_SHARED_LIBRARIES := \
     libhidltransport \
     libhardware \
     libutils \
-    android.hardware.power@1.0
+    android.hardware.power@1.0 \
+    vendor.lineage.power@1.0
 
 LOCAL_MODULE := android.hardware.power@1.0-service-nvidia
 LOCAL_INIT_RC := android.hardware.power@1.0-service-nvidia.rc
