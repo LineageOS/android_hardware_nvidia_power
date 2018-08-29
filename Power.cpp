@@ -111,6 +111,18 @@ Return<void> Power::getPlatformLowPowerStats(getPlatformLowPowerStats_cb _hidl_c
     return Void();
 }
 
+Return<int32_t> Power::getFeature(LineageFeature feature)  {
+    switch (feature) {
+    case LineageFeature::SUPPORTED_PROFILES:
+        return PROFILE_MAX;
+        break;
+    default:
+        ALOGW("Error getting the feature, it doesn't exist %d\n", feature);
+        return -1;
+        break;
+    }
+}
+
 status_t Power::registerAsSystemService() {
     status_t ret = 0;
 
@@ -120,6 +132,14 @@ status_t Power::registerAsSystemService() {
         goto fail;
     } else {
         ALOGI("Successfully registered IPower");
+    }
+
+    ret = ILineagePower::registerAsService();
+    if (ret != 0) {
+        ALOGE("Failed to register ILineagePower (%d)", ret);
+        goto fail;
+    } else {
+        ALOGI("Successfully registered ILineagePower");
     }
 
 fail:

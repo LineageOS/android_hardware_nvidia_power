@@ -58,6 +58,9 @@
 #define PM_QOS_BOOST_PRIORITY 35
 #define PM_QOS_APP_PROFILE_PRIORITY  40
 
+// Lineage power hints
+const static power_hint_t POWER_HINT_SET_PROFILE = (power_hint_t)0x00000111;
+
 struct input_dev_map {
     int dev_id;
     const char* dev_name;
