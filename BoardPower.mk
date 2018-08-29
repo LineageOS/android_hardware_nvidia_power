@@ -15,3 +15,7 @@
 LOCAL_PATH := hardware/nvidia/power
 
 DEVICE_MANIFEST_FILE += $(LOCAL_PATH)/manifest.xml
+
+ifeq ($(TARGET_TEGRA_POWER),lineage)
+    DEVICE_MANIFEST_FILE += $(LOCAL_PATH)/lineage.xml
+endif
