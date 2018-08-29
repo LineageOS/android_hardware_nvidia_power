@@ -19,6 +19,9 @@
 #define VENDOR_NVIDIA_HARDWARE_POWER_V1_0_POWER_H
 
 #include <vendor/nvidia/hardware/power/1.0/IPower.h>
+#ifdef LINEAGE_PROFILES
+#include <vendor/lineage/power/1.0/ILineagePower.h>
+#endif
 #include <hidl/MQDescriptor.h>
 #include <hidl/Status.h>
 #include <hardware/power.h>
@@ -33,12 +36,21 @@ namespace implementation {
 
 using ::android::hardware::power::V1_0::Feature;
 using ::android::hardware::power::V1_0::PowerHint;
+#ifdef LINEAGE_PROFILES
+using ::vendor::lineage::power::V1_0::ILineagePower;
+using ::vendor::lineage::power::V1_0::LineageFeature;
+using ::vendor::lineage::power::V1_0::LineagePowerHint;
+#endif
 using ::android::hardware::hidl_vec;
 using ::android::hardware::Return;
 using ::android::hardware::Void;
 using ::vendor::nvidia::hardware::power::V1_0::ExtPowerHint;
 
+#ifdef LINEAGE_PROFILES
+struct Power : public IPower, public ILineagePower {
+#else
 struct Power : public IPower {
+#endif
     struct powerhal_info *pInfo;
 
     // Methods from ::vendor::nvidia::hardware::power::V1_0::IPower follow.
@@ -54,6 +66,11 @@ struct Power : public IPower {
     Return<void> powerHint(PowerHint hint, int32_t data) override;
     Return<void> setFeature(Feature feature, bool activate) override;
     Return<void> getPlatformLowPowerStats(getPlatformLowPowerStats_cb _hidl_cb) override;
+
+#ifdef LINEAGE_PROFILES
+    // Methods from ::vendor::lineage::power::V1_0::ILineagePower follow.
+    Return<int32_t> getFeature(LineageFeature feature) override;
+#endif
 
     // Methods from ::android::hidl::base::V1_0::IBase follow.
 
