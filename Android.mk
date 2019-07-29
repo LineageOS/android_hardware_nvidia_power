@@ -1,4 +1,5 @@
 # Copyright (C) 2015 The CyanogenMod Project
+# Copyright (C) 2019 The LineageOS Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,12 +24,11 @@ ifneq ($(filter foster,$(TARGET_DEVICE)),)
 LOCAL_CFLAGS += -DENABLE_SATA_STANDBY_MODE
 endif
 
-# Any devices with a old interactive governor
 ifeq ($(TARGET_TEGRA_VERSION),t114)
-    LOCAL_CFLAGS += -DPOWER_MODE_LEGACY
+    LOCAL_CFLAGS += -DGPU_IS_LEGACY
 endif
 
-ifneq ($(filter $(TARGET_DEVICE), t210 t186),)
+ifneq ($(filter $(TARGET_DEVICE), t210 t186 t194),)
     LOCAL_CFLAGS += -DPOWER_MODE_SET_INTERACTIVE
 endif
 
@@ -51,6 +51,11 @@ LOCAL_SHARED_LIBRARIES := \
     libutils \
     android.hardware.power@1.0 \
     vendor.lineage.power@1.0
+
+ifeq ($(TARGET_TEGRA_PHS),nvphs)
+    LOCAL_CFLAGS += -DUSE_NVPHS
+    LOCAL_SHARED_LIBRARIES += libnvphs
+endif
 
 LOCAL_MODULE := android.hardware.power@1.0-service-nvidia
 LOCAL_INIT_RC := android.hardware.power@1.0-service-nvidia.rc

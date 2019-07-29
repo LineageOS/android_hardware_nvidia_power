@@ -201,7 +201,7 @@ private:
         KeyedVector<unsigned int, QueuedEvent*> mQueuedEvents;
 
         virtual void handleMessage(const Message& msg);
-        PokeHandler(TimeoutPoker* poker, Barrier* readyToRun);
+        PokeHandler(Barrier* readyToRun);
         int generateNewKey(void);
         void sendEventDelayed(nsecs_t delay, QueuedEvent* ev);
         int listenForHandleToCloseFd(int handle, int fd);

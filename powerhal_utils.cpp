@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
- * Copyright (c) 2016, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2013-2017, NVIDIA CORPORATION.  All rights reserved.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -50,6 +50,9 @@ void sysfs_read(const char *path, char *s, int size)
 
     len = read(fd, s, size);
     close(fd);
+
+    if (len == size)
+        s[len - 1] = '\0';
 
     if (len < 0) {
         strerror_r(errno, s, size);

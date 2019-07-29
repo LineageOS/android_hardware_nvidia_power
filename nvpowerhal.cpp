@@ -1,8 +1,8 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
- * Copyright (c) 2012-2015, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2012-2017, NVIDIA CORPORATION.  All rights reserved.
  * Copyright (C) 2015 The CyanogenMod Project
- * Copyright (C) 2017 The LineageOS Project
+ * Copyright (C) 2017-2019 The LineageOS Project
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -19,54 +19,21 @@
 
 #include <hardware/hardware.h>
 #include <hardware/power.h>
+#include <sys/system_properties.h>
 
+#include "powerhal_parser.h"
 #include "powerhal_utils.h"
 #include "powerhal.h"
 
-//
-// NOTE: BEWARE: These enumerations are duplicated from phs.h because phs.h
-// isn't available in customer builds.
-//
-// TODO: Consider implementing a binary shim library that links to libphs.so
-// and that encapsulates the phs.h definitions in compile time. Then link to
-// the shim from nvpowerhal and use a different API between powerhal and the
-// shim to ask it send various predetermined hints.
-//
-typedef enum
-{
-    NvUsecase_generic   = 0x00000001,
-    NvUsecase_graphics  = 0x00000002,
-    NvUsecase_camera    = 0x00000004,
-    NvUsecase_video     = 0x00000008,
-    NvUsecase_Force32   = 0x7fffffff
-} NvUsecase;
-
-typedef enum
-{
-    NvHintType_ThroughputHint   = 0,
-    NvHintType_FramerateTarget  = 1,
-    NvHintType_MinCPU           = 2,
-    NvHintType_MaxCPU           = 3,
-    NvHintType_MinGPU           = 4,
-    NvHintType_MaxGPU           = 5,
-    NvHintType_LastReserved     = 63,
-    NvHintType_Force32          = 0x7FFFFFFF
-} NvHintType;
-
-#define NVHINT_DEFAULT_TAG 0x00000000U
-
-#define PHS_DEBUG
+#ifdef USE_NVPHS
+#include "phs.h"
+#endif
 
 #ifdef POWER_MODE_SET_INTERACTIVE
 static int get_system_power_mode(void);
 static void set_interactive_governor(int mode);
 
-#define NVCPL_HINT_MAX_PERF 0
-#define NVCPL_HINT_OPT_PERF 1
-#define NVCPL_HINT_BAT_SAVE 4
-#define NVCPL_HINT_COUNT 4
-
-static const interactive_data_t interactive_data_array[] =
+static const interactive_data_t interactive_data_array[NVCPL_HINT_COUNT+1] =
 {
     { "1122000", "65 304000:75 1122000:80", "19000", "20000", "0", "41000", "90" },
     { "1020000", "65 256000:75 1020000:80", "19000", "20000", "0", "30000", "99" },
@@ -79,33 +46,10 @@ static const interactive_data_t interactive_data_array[] =
 // CPU/EMC ratio table source sysfs
 #define CPU_EMC_RATIO_SRC_NODE "/sys/kernel/tegra_cpu_emc/table_src"
 
-static const int VSyncActiveBoostFreq = 300000;
-
-static int get_input_count(void)
-{
-    int i = 0;
-    int ret;
-    char path[80];
-    char name[32];
-
-    while(1)
-    {
-        snprintf(path, sizeof(path), "/sys/class/input/input%d/name", i);
-        ret = access(path, F_OK);
-        if (ret < 0)
-            break;
-        memset(name, 0, 32);
-        sysfs_read(path, name, 32);
-        ALOGI("input device id:%d present with name:%s", i++, name);
-    }
-    return i;
-}
-
 static void find_input_device_ids(struct powerhal_info *pInfo)
 {
     int i = 0;
-    int status;
-    int count = 0;
+    size_t count = 0;
     char path[80];
     char name[MAX_CHARS];
 
@@ -117,38 +61,38 @@ static void find_input_device_ids(struct powerhal_info *pInfo)
         else {
             memset(name, 0, MAX_CHARS);
             sysfs_read(path, name, MAX_CHARS);
-            for (int j = 0; j < pInfo->input_cnt; j++) {
-                status = (-1 == pInfo->input_devs[j].dev_id)
-                    && (0 == strncmp(name,
-                    pInfo->input_devs[j].dev_name, MAX_CHARS));
-                if (status) {
-                    ++count;
-                    pInfo->input_devs[j].dev_id = i;
-                    ALOGI("find_input_device_ids: %d %s",
-                        pInfo->input_devs[j].dev_id,
-                        pInfo->input_devs[j].dev_name);
-                }
+            if (name[strlen(name) - 1] == '\n')
+                name[strlen(name) - 1] = '\0';
+            for (auto &input_dev : pInfo->input_devs) {
+                if (input_dev.dev_id >= 0)
+                    continue;
+                if (strncmp(name, input_dev.dev_name, MAX_CHARS))
+                    continue;
+                ++count;
+                input_dev.dev_id = i;
+                ALOGI("find_input_device_ids: %d %s",
+                    input_dev.dev_id, input_dev.dev_name);
             }
             ++i;
         }
 
-        if (count == pInfo->input_cnt)
+        if (count == pInfo->input_devs.size())
             break;
     }
 }
 
-static int check_hint(struct powerhal_info *pInfo, power_hint_t hint, uint64_t *t)
+static int check_hint(struct powerhal_info *pInfo, int hint, uint64_t *t)
 {
     struct timespec ts;
     uint64_t time;
 
-    if (hint >= MAX_POWER_HINT_COUNT) {
+    if (hint < NV_POWER_HINT_START || hint >= POWER_HINT_COUNT) {
         ALOGE("Invalid power hint: 0x%x", hint);
         return -1;
     }
 
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    time = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+    time = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 
     if (pInfo->hint_time[hint] && pInfo->hint_interval[hint] &&
         (time - pInfo->hint_time[hint] < pInfo->hint_interval[hint]))
@@ -159,168 +103,473 @@ static int check_hint(struct powerhal_info *pInfo, power_hint_t hint, uint64_t *
     return 0;
 }
 
-static void common_libphs_open (struct powerhal_info *pInfo)
+static void init_default_cpu_hints(power_hint_data_t *hints)
 {
-    pInfo->libphs_handle = dlopen("libphs.so", RTLD_NOW);
+    hints[POWER_HINT_INTERACTION] = {           1326000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                100};
+    hints[POWER_HINT_APP_LAUNCH] = {            INT_MAX,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1500};
+    hints[POWER_HINT_SHIELD_STREAMING] = {      816000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1000};
+    hints[POWER_HINT_HIGH_RES_VIDEO] = {        816000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1000};
+    hints[POWER_HINT_VIDEO_DECODE] = {          710000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1000};
+    hints[POWER_HINT_MIRACAST] = {              816000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1000};
+    hints[POWER_HINT_DISPLAY_ROTATION] = {      1500000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                2000};
+    hints[POWER_HINT_AUDIO_SPEAKER] = {         512000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1000};
+    hints[POWER_HINT_AUDIO_OTHER] = {           512000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1000};
+    hints[POWER_HINT_AUDIO_LOW_LATENCY] = {     1000000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1000};
+    // VSYNC boost ignores duration
+    hints[POWER_HINT_VSYNC] = {                 300000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1};
+}
 
-    if (pInfo->libphs_handle) {
-        pInfo->NvVaSendThroughputHints = (sendhints_fn_t)dlsym(pInfo->libphs_handle, "NvVaSendThroughputHints");
-        pInfo->NvCancelThroughputHints = (cancelhints_fn_t)dlsym(pInfo->libphs_handle, "NvCancelThroughputHints");
+static void init_default_gpu_hints(power_hint_data_t *hints)
+{
+    hints[POWER_HINT_INTERACTION] = {           540000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                2000};
+    hints[POWER_HINT_APP_LAUNCH] = {            180000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1500};
+    hints[POWER_HINT_DISPLAY_ROTATION] = {      252000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                2000};
+}
 
-        if (pInfo->NvVaSendThroughputHints && pInfo->NvCancelThroughputHints)
-            return;
+static void init_default_emc_hints(power_hint_data_t *hints)
+{
+    hints[POWER_HINT_INTERACTION] = {           396000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                2000};
+    hints[POWER_HINT_APP_LAUNCH] = {            792000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1500};
+    hints[POWER_HINT_DISPLAY_ROTATION] = {      400000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                2000};
+    hints[POWER_HINT_AUDIO_LOW_LATENCY] = {     300000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1000};
+}
+
+static void init_default_online_cpu_hints(power_hint_data_t *hints)
+{
+    hints[POWER_HINT_INTERACTION] = {           2,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                2000};
+    hints[POWER_HINT_MULTITHREAD_BOOST] = {     4,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                2000};
+    hints[POWER_HINT_APP_LAUNCH] = {            2,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1500};
+    hints[POWER_HINT_SHIELD_STREAMING] = {      2,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1000};
+    hints[POWER_HINT_HIGH_RES_VIDEO] = {        2,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1000};
+    hints[POWER_HINT_VIDEO_DECODE] = {          1,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1000};
+    hints[POWER_HINT_DISPLAY_ROTATION] = {      2,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                2000};
+    hints[POWER_HINT_AUDIO_LOW_LATENCY] = {      4,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                2000};
+
+}
+
+static void init_default_hint_intervals(struct powerhal_info *pInfo)
+{
+    pInfo->hint_interval[POWER_HINT_VSYNC] = 0;
+    pInfo->hint_interval[POWER_HINT_INTERACTION] = 90;
+    pInfo->hint_interval[POWER_HINT_APP_PROFILE] = 200;
+    pInfo->hint_interval[POWER_HINT_APP_LAUNCH] = 1500;
+    pInfo->hint_interval[POWER_HINT_SHIELD_STREAMING] = 500;
+    pInfo->hint_interval[POWER_HINT_HIGH_RES_VIDEO] = 500;
+    pInfo->hint_interval[POWER_HINT_VIDEO_DECODE] = 500;
+    pInfo->hint_interval[POWER_HINT_MIRACAST] = 500;
+    pInfo->hint_interval[POWER_HINT_AUDIO_SPEAKER] = 500;
+    pInfo->hint_interval[POWER_HINT_AUDIO_OTHER] = 500;
+    pInfo->hint_interval[POWER_HINT_AUDIO_LOW_LATENCY] = 500;
+    pInfo->hint_interval[POWER_HINT_DISPLAY_ROTATION] = 200;
+    pInfo->hint_interval[POWER_HINT_POWER_MODE] = 0;
+}
+
+static void init_default_hint_parameters(struct powerhal_info *pInfo)
+{
+    for (auto &cpu_cluster : pInfo->cpu_clusters) {
+        init_default_cpu_hints(cpu_cluster.hints);
     }
+    pInfo->boot_boost_time_ms = 15000;
+    init_default_gpu_hints(pInfo->gpu_freq_hints);
+    init_default_emc_hints(pInfo->emc_freq_hints);
+    init_default_online_cpu_hints(pInfo->online_cpu_hints);
+    init_default_hint_intervals(pInfo);
+}
 
-    pInfo->NvVaSendThroughputHints = NULL;
-    pInfo->NvCancelThroughputHints = NULL;
+static void init_hint_parameters(struct powerhal_info *pInfo)
+{
+    int ret = -1;
+    char hw_name[PROP_VALUE_MAX];
+
+    if (__system_property_get(HARDWARE_TYPE_PROP, hw_name))
+        ret = parse_xml(pInfo, hw_name);
+    else
+        ALOGE("Could not read property %s", HARDWARE_TYPE_PROP);
+
+    if (ret) {
+        ALOGW("Initializing hint parameters to default values");
+        // Initialize default cluster. This emulates legacy behavior.
+        if (pInfo->cpu_clusters.size() == 0) {
+            pInfo->cpu_clusters.push_back({});
+            pInfo->cpu_clusters[0].pmqos_constraint_path = PMQOS_CONSTRAINT_CPU_FREQ;
+            pInfo->cpu_clusters[0].available_freqs_path = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies";
+        }
+        init_default_hint_parameters(pInfo);
+    }
 }
 
 void common_power_open(struct powerhal_info *pInfo)
 {
-    int i;
+    int j;
     int size = 256;
     char *pch;
 
-    if (0 == pInfo->input_devs || 0 == pInfo->input_cnt)
-        pInfo->input_cnt = get_input_count();
-    else
-        find_input_device_ids(pInfo);
+    if (!pInfo) {
+        ALOGE("%s: null argument of powerhal info", __func__);
+        return;
+    }
 
     // Initialize timeout poker
     Barrier readyToRun;
     pInfo->mTimeoutPoker = new TimeoutPoker(&readyToRun);
     readyToRun.wait();
 
+    init_hint_parameters(pInfo);
+    find_input_device_ids(pInfo);
+
     // Read available frequencies
     char *buf = (char*)malloc(sizeof(char) * size);
-    memset(buf, 0, size);
-    sysfs_read("/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies",
-               buf, size);
 
-    // Determine number of available frequencies
-    pch = strtok(buf, " ");
-    pInfo->num_available_frequencies = -1;
-    while(pch != NULL)
-    {
-        pch = strtok(NULL, " ");
-        pInfo->num_available_frequencies++;
-    }
+    for (auto &cpu_cluster : pInfo->cpu_clusters) {
+        if (access(cpu_cluster.available_freqs_path, R_OK)) {
+            ALOGW("Cannot access %s. Certain power hints may not work!",
+                        cpu_cluster.available_freqs_path);
+            cpu_cluster.num_available_frequencies = 0;
+            cpu_cluster.available_frequencies = NULL;
+            continue;
+        }
+        memset(buf, 0, size);
+        sysfs_read(cpu_cluster.available_freqs_path, buf, size);
 
-    // Store available frequencies in a lookup array
-    pInfo->available_frequencies = (int*)malloc(sizeof(int) * pInfo->num_available_frequencies);
-    sysfs_read("/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies",
-               buf, size);
-    pch = strtok(buf, " ");
-    for(i = 0; i < pInfo->num_available_frequencies; i++)
-    {
-        pInfo->available_frequencies[i] = atoi(pch);
-        pch = strtok(NULL, " ");
-    }
+        // Determine number of available frequencies
+        pch = strtok(buf, " ");
+        cpu_cluster.num_available_frequencies = -1;
+        while(pch != NULL)
+        {
+            pch = strtok(NULL, " ");
+            cpu_cluster.num_available_frequencies++;
+        }
 
-    // Store LP cluster max frequency
-    sysfs_read("/sys/devices/system/cpu/cpuquiet/tegra_cpuquiet/idle_top_freq",
-                buf, size);
-    pInfo->lp_max_frequency = atoi(buf);
-
-    pInfo->interaction_boost_frequency = pInfo->lp_max_frequency;
-    pInfo->animation_boost_frequency = pInfo->lp_max_frequency;
-
-    for (i = 0; i < pInfo->num_available_frequencies; i++)
-    {
-        if (pInfo->available_frequencies[i] >= 1326000) {
-            pInfo->interaction_boost_frequency = pInfo->available_frequencies[i];
-            break;
+        // Store available frequencies in a lookup array
+        cpu_cluster.available_frequencies = (int*)malloc(sizeof(int)
+                        * cpu_cluster.num_available_frequencies);
+        sysfs_read(cpu_cluster.available_freqs_path, buf, size);
+        pch = strtok(buf, " ");
+        for(j = 0; j < cpu_cluster.num_available_frequencies; j++)
+        {
+            cpu_cluster.available_frequencies[j] = atoi(pch);
+            pch = strtok(NULL, " ");
         }
     }
 
-    for (i = 0; i < pInfo->num_available_frequencies; i++)
-    {
-        if (pInfo->available_frequencies[i] >= 1024000) {
-            pInfo->animation_boost_frequency = pInfo->available_frequencies[i];
-            break;
-        }
-    }
-
-    // Store CPU0 max frequency
-    sysfs_read(SYS_NODE_CPU0_MAX_FREQ, buf, size);
-    pInfo->cpu0_max_frequency = atoi(buf);
-
-    // Initialize hint intervals in usec
-    //
-    // Set the interaction timeout to be slightly shorter than the duration of
-    // the interaction boost so that we can maintain is constantly during
-    // interaction.
-    pInfo->hint_interval[POWER_HINT_VSYNC] = 0;
-    pInfo->hint_interval[POWER_HINT_INTERACTION] = 90000;
-    pInfo->hint_interval[POWER_HINT_SET_PROFILE] = 200000;
-    pInfo->hint_interval[POWER_HINT_LAUNCH] = 1500000;
-    pInfo->hint_interval[POWER_HINT_VIDEO_DECODE] = 500000;
-    pInfo->hint_interval[POWER_HINT_VIDEO_ENCODE] = 500000;
-    pInfo->hint_interval[POWER_HINT_LOW_POWER] = 0;
+    // Initialize AppProfile defaults
+    pInfo->defaults.min_freq = 0;
+    pInfo->defaults.max_freq = PM_QOS_DEFAULT_VALUE;
+    pInfo->defaults.core_cap = PM_QOS_DEFAULT_VALUE;
+    pInfo->defaults.gpu_cap = PM_QOS_DEFAULT_VALUE;
+    pInfo->defaults.fan_cap = 70;
+    pInfo->defaults.power_cap = 0;
 
     // Initialize fds
-    pInfo->fds.vsync_min_cpu = -1;
+    for (auto &cpu_cluster : pInfo->cpu_clusters) {
+        cpu_cluster.fd_app_min_freq = -1;
+        cpu_cluster.fd_app_max_freq = -1;
+        cpu_cluster.fd_vsync_min_freq = -1;
+    }
+    pInfo->fds.app_max_online_cpus = -1;
+    pInfo->fds.app_min_online_cpus = -1;
+    pInfo->fds.app_max_gpu = -1;
+    pInfo->fds.app_min_gpu = -1;
 
-    // Initialize libphs
-    common_libphs_open(pInfo);
+    // Initialize features
+    pInfo->features.fan = sysfs_exists("/sys/devices/platform/pwm-fan/pwm_cap");
 
     free(buf);
 }
 
 static void set_vsync_min_cpu_freq(struct powerhal_info *pInfo, int enabled)
 {
-    if (enabled && pInfo->fds.vsync_min_cpu == -1) {
-        pInfo->fds.vsync_min_cpu =
-        pInfo->mTimeoutPoker->requestPmQos(PMQOS_CONSTRAINT_CPU_FREQ, PM_QOS_BOOST_PRIORITY, PM_QOS_DEFAULT_VALUE, VSyncActiveBoostFreq);
-    } else if (!enabled && pInfo->fds.vsync_min_cpu >= 0) {
-        close(pInfo->fds.vsync_min_cpu);
-        pInfo->fds.vsync_min_cpu = -1;
+    if (enabled) {
+        for (auto &cpu_cluster : pInfo->cpu_clusters)
+            if (cpu_cluster.fd_vsync_min_freq == -1)
+                cpu_cluster.fd_vsync_min_freq =
+                pInfo->mTimeoutPoker->requestPmQos(cpu_cluster.pmqos_constraint_path,
+                                    PM_QOS_BOOST_PRIORITY, PM_QOS_DEFAULT_VALUE,
+                                    cpu_cluster.hints[POWER_HINT_VSYNC].min);
+    } else {
+        for (auto &cpu_cluster : pInfo->cpu_clusters)
+            if (cpu_cluster.fd_vsync_min_freq >= 0) {
+                close(cpu_cluster.fd_vsync_min_freq);
+                cpu_cluster.fd_vsync_min_freq = -1;
+            }
     }
 
-    ALOGV("%s: set min CPU floor =%i", __func__, VSyncActiveBoostFreq);
+    ALOGV("%s: set min CPU floor =%i", __func__, pInfo->cpu_clusters[0].hints[POWER_HINT_VSYNC].min);
+}
+
+static void set_app_profile_min_cpu_freq(struct powerhal_info *pInfo, int value)
+{
+    if (value < 0)
+        value = pInfo->defaults.min_freq;
+
+    for (auto &cpu_cluster : pInfo->cpu_clusters) {
+        if (cpu_cluster.fd_app_min_freq >= 0)
+            close(cpu_cluster.fd_app_min_freq);
+        cpu_cluster.fd_app_min_freq =
+            pInfo->mTimeoutPoker->requestPmQos(cpu_cluster.pmqos_constraint_path,
+                                PM_QOS_APP_PROFILE_PRIORITY, PM_QOS_DEFAULT_VALUE, value);
+    }
+    ALOGV("%s: set min CPU floor =%d", __func__, value);
+}
+
+static void set_app_profile_max_cpu_freq_cluster(struct powerhal_info *pInfo, int value,
+                cpu_cluster_data_t *cluster)
+{
+    if (cluster->fd_app_max_freq >= 0)
+        close(cluster->fd_app_max_freq);
+    cluster->fd_app_max_freq =
+        pInfo->mTimeoutPoker->requestPmQos(cluster->pmqos_constraint_path,
+                            PM_QOS_APP_PROFILE_PRIORITY, value, PM_QOS_DEFAULT_VALUE);
+
+    ALOGV("%s: set max CPU ceiling =%d", __func__, value);
+}
+
+static void set_app_profile_max_cpu_freq_percent(struct powerhal_info *pInfo, int percent)
+{
+    int targetMaxFreq;
+
+    if (percent == PM_QOS_DEFAULT_VALUE)
+        percent = 100;
+
+    if (percent <= 0 || percent > 100) {
+        ALOGW("%s: invalid percentage =%d", __func__, percent);
+        return;
+    }
+    for (auto &cpu_cluster : pInfo->cpu_clusters) {
+        if (cpu_cluster.num_available_frequencies == 0)
+            continue;
+        targetMaxFreq = percent *
+            cpu_cluster.available_frequencies[cpu_cluster.num_available_frequencies - 1] / 100;
+        set_app_profile_max_cpu_freq_cluster(pInfo, targetMaxFreq, &cpu_cluster);
+    }
+}
+
+static void set_app_profile_max_online_cpus(struct powerhal_info *pInfo, int value)
+{
+    if (value <= 0)
+        value = pInfo->defaults.core_cap;
+
+    if (pInfo->fds.app_max_online_cpus >= 0) {
+        close(pInfo->fds.app_max_online_cpus);
+        pInfo->fds.app_max_online_cpus = -1;
+    }
+    pInfo->fds.app_max_online_cpus =
+        pInfo->mTimeoutPoker->requestPmQos(PMQOS_CONSTRAINT_ONLINE_CPUS, PM_QOS_APP_PROFILE_PRIORITY, value, PM_QOS_DEFAULT_VALUE);
+
+    ALOGV("%s: set max online CPU core =%d", __func__, value);
+}
+
+static void set_app_profile_min_online_cpus(struct powerhal_info *pInfo, int value)
+{
+    if (pInfo->fds.app_min_online_cpus >= 0) {
+        close(pInfo->fds.app_min_online_cpus);
+        pInfo->fds.app_min_online_cpus = -1;
+    }
+    pInfo->fds.app_min_online_cpus =
+        pInfo->mTimeoutPoker->requestPmQos(PMQOS_CONSTRAINT_ONLINE_CPUS, PM_QOS_APP_PROFILE_PRIORITY, PM_QOS_DEFAULT_VALUE, value);
+
+    ALOGV("%s: set min online CPU core =%d", __func__, value);
+}
+
+static void set_app_profile_min_gpu_freq(struct powerhal_info *pInfo, int value)
+{
+    if (pInfo->fds.app_min_gpu >= 0) {
+        close(pInfo->fds.app_min_gpu);
+        pInfo->fds.app_min_gpu = -1;
+    }
+    if (value)
+        value = 0;
+    else
+        value = INT_MAX;
+
+    pInfo->fds.app_min_gpu =
+        pInfo->mTimeoutPoker->requestPmQos(PMQOS_CONSTRAINT_GPU_FREQ, PM_QOS_APP_PROFILE_PRIORITY, PM_QOS_DEFAULT_VALUE, value);
+}
+
+static void set_prism_control_enable(int value)
+{
+    if (value)
+        set_property_int(PRISM_CONTROL_PROP, 1);
+    else
+        set_property_int(PRISM_CONTROL_PROP, 0);
+    ALOGV("%s: set prism enable =%d", __func__, value);
+}
+
+static void set_app_profile_max_gpu_freq(struct powerhal_info *pInfo, int value)
+{
+    if (value <= 0)
+        value = pInfo->defaults.gpu_cap;
+
+#ifndef GPU_IS_LEGACY
+    if (pInfo->fds.app_max_gpu >= 0) {
+        close(pInfo->fds.app_max_gpu);
+        pInfo->fds.app_max_gpu = -1;
+    }
+    pInfo->fds.app_max_gpu =
+        pInfo->mTimeoutPoker->requestPmQos(PMQOS_CONSTRAINT_GPU_FREQ, PM_QOS_APP_PROFILE_PRIORITY, value, PM_QOS_DEFAULT_VALUE);
+#else
+    /* legacy sysfs nodes to throttle GPU on "pre-T124" chips */
+    sysfs_write_int("sys/kernel/tegra_cap/cbus_cap_state", 1);
+    sysfs_write_int("sys/kernel/tegra_cap/cbus_cap_level", value);
+#endif
+}
+
+static void set_pbc_power(struct powerhal_info *pInfo, int value)
+{
+    if (value < 0)
+        value = pInfo->defaults.power_cap;
+
+    set_property_int(POWER_CAP_PROP, value);
+}
+
+static void set_fan_cap(struct powerhal_info *pInfo, int value)
+{
+    if (!pInfo->features.fan)
+        return;
+
+    if (value < 0)
+        value = pInfo->defaults.fan_cap;
+
+    sysfs_write_int("/sys/devices/platform/pwm-fan/pwm_cap", value);
+}
+
+static void app_profile_set(struct powerhal_info *pInfo, app_profile_knob *data)
+{
+    int i;
+
+    for (i = 0; i < APP_PROFILE_COUNT; i++)
+    {
+        switch (i) {
+            case APP_PROFILE_CPU_SCALING_MIN_FREQ:
+                set_app_profile_min_cpu_freq(pInfo, data[i]);
+                break;
+            case APP_PROFILE_CPU_MAX_NORMAL_FREQ_IN_PERCENTAGE:
+                //As user operation take the highest priority
+                //Other cpu max freq related control should be before it.
+                set_app_profile_max_cpu_freq_percent(pInfo, data[i]);
+                break;
+            case APP_PROFILE_CPU_MAX_CORE:
+                set_app_profile_max_online_cpus(pInfo, data[i]);
+                break;
+            case APP_PROFILE_GPU_CBUS_CAP_LEVEL:
+                set_app_profile_max_gpu_freq(pInfo, data[i]);
+                break;
+            case APP_PROFILE_GPU_SCALING:
+                set_app_profile_min_gpu_freq(pInfo, data[i]);
+                break;
+            case APP_PROFILE_PRISM_CONTROL_ENABLE:
+                set_prism_control_enable(data[i]);
+                break;
+            case APP_PROFILE_CPU_MIN_CORE:
+                set_app_profile_min_online_cpus(pInfo, data[i]);
+                break;
+            case APP_PROFILE_FAN_CAP:
+                set_fan_cap(pInfo, data[i]);
+                break;
+            case APP_PROFILE_PBC_POWER:
+                set_pbc_power(pInfo, data[i]);
+                break;
+            default:
+                break;
+        }
+    }
 }
 
 void common_power_init(struct powerhal_info *pInfo)
 {
-    common_power_open(pInfo);
+    if (!pInfo)
+        return;
 
     pInfo->ftrace_enable = get_property_bool("nvidia.hwc.ftrace_enable", false);
 
     // Boost to max frequency on initialization to decrease boot time
-    pInfo->mTimeoutPoker->requestPmQosTimed(PMQOS_CONSTRAINT_CPU_FREQ,
+    for (auto &cpu_cluster : pInfo->cpu_clusters)
+        if (cpu_cluster.num_available_frequencies > 0)
+            pInfo->mTimeoutPoker->requestPmQosTimed(cpu_cluster.pmqos_constraint_path,
                                             PM_QOS_BOOST_PRIORITY,
                                             PM_QOS_DEFAULT_VALUE,
-                                            pInfo->available_frequencies[pInfo->num_available_frequencies - 1],
-                                            s2ns(15));
+                                            cpu_cluster.available_frequencies[cpu_cluster.num_available_frequencies - 1],
+                                            ms2ns(pInfo->boot_boost_time_ms));
 
     pInfo->switch_cpu_emc_limit_enabled = sysfs_exists(CPU_EMC_RATIO_SRC_NODE);
 }
 
 void common_power_set_interactive(struct powerhal_info *pInfo, int on)
 {
-    int i;
     int dev_id;
     char path[80];
     const char* state = (0 == on)?"0":"1";
 
-    sysfs_write("/sys/devices/platform/host1x/nvavp/boost_sclk", state);
+    if (!pInfo)
+        return;
 
-    if (0 != pInfo) {
-        for (i = 0; i < pInfo->input_cnt; i++) {
-            if (0 == pInfo->input_devs)
-                dev_id = i;
-            else if (-1 == pInfo->input_devs[i].dev_id)
-                continue;
+    if (!pInfo->no_sclk_boost)
+        sysfs_write("/sys/devices/platform/host1x/nvavp/boost_sclk", state);
+
+    for (auto &input_dev : pInfo->input_devs) {
+        if (input_dev.dev_id < 0)
+            continue;
+
+        dev_id = input_dev.dev_id;
+        snprintf(path, sizeof(path), "/sys/class/input/input%d/enabled", dev_id);
+        if (!access(path, W_OK)) {
+            if (0 == on)
+                ALOGI("Disabling input device:%d", dev_id);
             else
-                dev_id = pInfo->input_devs[i].dev_id;
-            snprintf(path, sizeof(path), "/sys/class/input/input%d/enabled", dev_id);
-            if (!access(path, W_OK)) {
-                if (0 == on)
-                    ALOGI("Disabling input device:%d", dev_id);
-                else
-                    ALOGI("Enabling input device:%d", dev_id);
-                sysfs_write(path, state);
-            }
+                ALOGI("Enabling input device:%d", dev_id);
+            sysfs_write(path, state);
         }
 
         if(pInfo->switch_cpu_emc_limit_enabled) {
@@ -328,9 +577,11 @@ void common_power_set_interactive(struct powerhal_info *pInfo, int on)
         }
     }
 
+    if (pInfo->no_cpufreq_interactive)
+        return;
+
 #ifdef POWER_MODE_SET_INTERACTIVE
     if (on) {
-        int power_mode = -1;
         power_mode = get_system_power_mode();
         if (power_mode < NVCPL_HINT_MAX_PERF || power_mode > NVCPL_HINT_COUNT) {
             ALOGV("%s: no system power mode info, take optimized settings", __func__);
@@ -340,9 +591,6 @@ void common_power_set_interactive(struct powerhal_info *pInfo, int on)
         power_mode = NVCPL_HINT_COUNT;
     }
     set_interactive_governor(power_mode);
-#elif defined(POWER_MODE_LEGACY)
-    sysfs_write("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor",
-        (on == 0)?"conservative":"interactive");
 #else
     sysfs_write("/sys/devices/system/cpu/cpufreq/interactive/hispeed_freq", (on == 0)?"420000":"624000");
     sysfs_write("/sys/devices/system/cpu/cpufreq/interactive/target_loads", (on == 0)?"45 312000:75 564000:85":"65 228000:75 624000:85");
@@ -398,10 +646,9 @@ static void set_interactive_governor(int mode)
             interactive_data_array[mode].go_hispeed_load);
 }
 
-static void set_power_mode_hint(struct powerhal_info *pInfo, int *data)
+static void set_power_mode_hint(struct powerhal_info *pInfo, nvcpl_hint_t *data)
 {
-    int map[] = {NVCPL_HINT_BAT_SAVE, NVCPL_HINT_OPT_PERF, NVCPL_HINT_MAX_PERF, NVCPL_HINT_BIAS_SAVE, NVCPL_HINT_BIAS_PERF};
-    int mode = *data;
+    int mode = data[0];
     int status;
     char value[4] = { 0 };
 
@@ -411,26 +658,55 @@ static void set_power_mode_hint(struct powerhal_info *pInfo, int *data)
         return;
     }
 
+    if (pInfo->no_cpufreq_interactive)
+        return;
+
     // only set interactive governor parameters when display on
     sysfs_read("/sys/class/backlight/pwm-backlight/brightness", value, sizeof(value));
     status = atoi(value);
 
     if (status)
     {
-        set_interactive_governor(map[mode]);
+        set_interactive_governor(mode);
     }
 
 }
 #endif
 
+static void apply_gpu_boost(struct powerhal_info *pInfo, int hint)
+{
+    pInfo->mTimeoutPoker->requestPmQosTimed(PMQOS_CONSTRAINT_GPU_FREQ,
+                                            PM_QOS_BOOST_PRIORITY,
+                                            pInfo->gpu_freq_hints[hint].max,
+                                            pInfo->gpu_freq_hints[hint].min,
+                                            ms2ns(pInfo->gpu_freq_hints[hint].time_ms));
+}
+
+static void apply_online_cpus_boost(struct powerhal_info *pInfo, int hint)
+{
+    pInfo->mTimeoutPoker->requestPmQosTimed(PMQOS_CONSTRAINT_ONLINE_CPUS,
+                                            PM_QOS_BOOST_PRIORITY,
+                                            pInfo->online_cpu_hints[hint].max,
+                                            pInfo->online_cpu_hints[hint].min,
+                                            ms2ns(pInfo->online_cpu_hints[hint].time_ms));
+}
+
+static void apply_emc_boost(struct powerhal_info *pInfo, int hint)
+{
+    pInfo->mTimeoutPoker->requestPmQosTimed("/dev/emc_freq_min",
+                                            pInfo->emc_freq_hints[hint].min,
+                                            ms2ns(pInfo->emc_freq_hints[hint].time_ms));
+}
+
 void common_power_hint(struct powerhal_info *pInfo,
-                            power_hint_t hint, void *data)
+                            power_hint_t hintId, void *data)
 {
     uint64_t t;
 
     if (!pInfo)
         return;
 
+    int hint = hintId;
     if (check_hint(pInfo, hint, &t) < 0)
         return;
 
@@ -441,75 +717,62 @@ void common_power_hint(struct powerhal_info *pInfo,
         break;
     case POWER_HINT_INTERACTION:
         break;
-    /*case POWER_HINT_MULTITHREAD_BOOST:
-        // Boost to 4 cores
-        pInfo->mTimeoutPoker->requestPmQosTimed(PMQOS_CONSTRAINT_ONLINE_CPUS,
-                                                PM_QOS_BOOST_PRIORITY,
-                                                PM_QOS_DEFAULT_VALUE,
-                                                4,
-                                                s2ns(2));
-        break;*/
-    case POWER_HINT_LAUNCH:
-        // Boost to 1.2Ghz dual core
-        pInfo->mTimeoutPoker->requestPmQosTimed(PMQOS_CONSTRAINT_CPU_FREQ,
-                                                PM_QOS_BOOST_PRIORITY,
-                                                PM_QOS_DEFAULT_VALUE,
-                                                INT_MAX,
-                                                ms2ns(1500));
-        pInfo->mTimeoutPoker->requestPmQosTimed(PMQOS_CONSTRAINT_ONLINE_CPUS,
-                                                PM_QOS_BOOST_PRIORITY,
-                                                PM_QOS_DEFAULT_VALUE,
-                                                2,
-                                                ms2ns(1500));
-        pInfo->mTimeoutPoker->requestPmQosTimed(PMQOS_CONSTRAINT_GPU_FREQ,
-                                                PM_QOS_BOOST_PRIORITY,
-                                                PM_QOS_DEFAULT_VALUE,
-                                                180000,
-                                                ms2ns(1500));
-        pInfo->mTimeoutPoker->requestPmQosTimed("/dev/emc_freq_min",
-                                                792000,
-                                                ms2ns(1500));
-        break;
-    case POWER_HINT_VIDEO_ENCODE:
-        // set minimum 2 CPU core
-        pInfo->mTimeoutPoker->requestPmQosTimed(PMQOS_CONSTRAINT_ONLINE_CPUS,
-                                                PM_QOS_BOOST_PRIORITY,
-                                                PM_QOS_DEFAULT_VALUE,
-                                                2,
-                                                s2ns(1));
-        // Set minimum CPU freq to 816 MHz
-        pInfo->mTimeoutPoker->requestPmQosTimed(PMQOS_CONSTRAINT_CPU_FREQ,
-                                                PM_QOS_BOOST_PRIORITY,
-                                                PM_QOS_DEFAULT_VALUE,
-                                                816000,
-                                                s2ns(1));
-        break;
+    case POWER_HINT_MULTITHREAD_BOOST:
+    case POWER_HINT_APP_LAUNCH:
+    case POWER_HINT_SHIELD_STREAMING:
+    case POWER_HINT_HIGH_RES_VIDEO:
     case POWER_HINT_VIDEO_DECODE:
-        // set minimum 1 CPU core
-        pInfo->mTimeoutPoker->requestPmQosTimed(PMQOS_CONSTRAINT_ONLINE_CPUS,
+    case POWER_HINT_MIRACAST:
+    case POWER_HINT_DISPLAY_ROTATION:
+    case POWER_HINT_AUDIO_SPEAKER:
+    case POWER_HINT_AUDIO_OTHER:
+    case POWER_HINT_AUDIO_LOW_LATENCY:
+        for (auto &cpu_cluster : pInfo->cpu_clusters) {
+            pInfo->mTimeoutPoker->requestPmQosTimed(cpu_cluster.pmqos_constraint_path,
                                                 PM_QOS_BOOST_PRIORITY,
-                                                PM_QOS_DEFAULT_VALUE,
-                                                1,
-                                                s2ns(1));
-        // Set minimum CPU freq to 710 MHz
-        pInfo->mTimeoutPoker->requestPmQosTimed(PMQOS_CONSTRAINT_CPU_FREQ,
-                                                PM_QOS_BOOST_PRIORITY,
-                                                PM_QOS_DEFAULT_VALUE,
-                                                710000,
-                                                s2ns(1));
+                                                cpu_cluster.hints[hint].max,
+                                                cpu_cluster.hints[hint].min,
+                                                ms2ns(cpu_cluster.hints[hint].time_ms));
+        }
+
+        apply_gpu_boost(pInfo, hint);
+        apply_online_cpus_boost(pInfo, hint);
+        apply_emc_boost(pInfo, hint);
+        break;
+    case POWER_HINT_APP_PROFILE:
+        if (data) {
+            app_profile_set(pInfo, (app_profile_knob*)data);
+        } else {
+            ALOGW("POWER_HINT_APP_PROFILE: no data, ignore.");
+        }
+        break;
+    case POWER_HINT_CAMERA:
+        ALOGW("Camera hint is not supported in PowerHAL");
         break;
     case POWER_HINT_SET_PROFILE:
 #ifdef POWER_MODE_SET_INTERACTIVE
-        // Set interactive governor parameters according to power mode
-        set_power_mode_hint(pInfo, (int32_t *)data);
+        if (data) {
+            // Set interactive governor parameters according to power mode
+            set_power_mode_hint(pInfo, (nvcpl_hint_t *)data);
+        } else {
+            ALOGE("POWER_HINT_POWER_MODE: no data, ignore.");
+        }
 #endif
         break;
     case POWER_HINT_LOW_POWER:
 #ifdef POWER_MODE_SET_INTERACTIVE
-        int new_state = (data ? PROFILE_POWER_SAVE : PROFILE_BALANCED);
+        nvcpl_hint_t new_state = (data ? NVCPL_HINT_BAT_SAVE : NVCPL_HINT_OPT_PERF);
         set_power_mode_hint(pInfo, &new_state);
 #endif
         break;
+#ifdef USE_NVPHS
+    case POWER_HINT_FRAMEWORKS_UI:
+        NvPHSSendThroughputHints(*((int*)data), PHS_FLAG_IMMEDIATE, NvUsecase_ui, NvHintType_TransientCpuLoad, INT_MAX, NVPHS_IMMEDIATE_MODE_MIN_HINT_TIMEOUT_MS, NvUsecase_NULL);
+        break;
+    case POWER_HINT_CANCEL_PHS_HINT:
+        NvPHSCancelThroughputHints(*((int*)data),NvUsecase_ui);
+        break;
+#endif
     default:
         ALOGE("Unknown power hint: 0x%x", hint);
         break;

@@ -45,15 +45,8 @@ using ::android::hardware::Void;
 using ::android::hardware::power::V1_0::Feature;
 
 Power::Power() {
-    static struct input_dev_map input_devs[] = {
-        {-1, "raydium_ts\n"},
-        {-1, "touch\n"},
-    };
-
     if (!pInfo)
         pInfo = (powerhal_info*)malloc(sizeof(powerhal_info));
-    pInfo->input_devs = input_devs;
-    pInfo->input_cnt = sizeof(input_devs)/sizeof(struct input_dev_map);
 
     common_power_init(pInfo);
 }
@@ -61,7 +54,6 @@ Power::Power() {
 // Methods from ::android::hardware::power::V1_0::IPower follow.
 Return<void> Power::setInteractive(bool interactive)  {
     common_power_set_interactive(pInfo, interactive ? 1 : 0);
-    set_power_level_floor(interactive);
 
 #ifdef ENABLE_SATA_STANDBY_MODE
     if (!access(FOSTER_E_HDD, F_OK)) {
@@ -114,7 +106,7 @@ Return<void> Power::getPlatformLowPowerStats(getPlatformLowPowerStats_cb _hidl_c
 Return<int32_t> Power::getFeature(LineageFeature feature)  {
     switch (feature) {
     case LineageFeature::SUPPORTED_PROFILES:
-        return PROFILE_MAX;
+        return NVCPL_HINT_COUNT-1;
         break;
     default:
         ALOGW("Error getting the feature, it doesn't exist %d\n", feature);
