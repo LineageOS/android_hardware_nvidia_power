@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2013 NVIDIA Corporation.  All Rights Reserved.
+ * Copyright (c) 2011-2016 NVIDIA Corporation.  All Rights Reserved.
  *
  * NVIDIA Corporation and its licensors retain all intellectual property and
  * proprietary rights in and to this software and related documentation.  Any
@@ -20,7 +20,7 @@ enum {
 
 TimeoutPoker::TimeoutPoker(Barrier* readyToRun)
 {
-    mPokeHandler = new PokeHandler(this, readyToRun);
+    mPokeHandler = new PokeHandler(readyToRun);
 }
 
 //Called usually from IPC thread
@@ -110,6 +110,8 @@ int TimeoutPoker::createPmQosHandle(const char* filename,
 void TimeoutPoker::requestPmQosTimed(const char* filename,
         int val, nsecs_t timeout)
 {
+    if (timeout == 0)
+        return;
     pushEvent(new PmQosOpenTimedEvent(
                 filename, val, timeout));
 }
@@ -140,6 +142,8 @@ int TimeoutPoker::createPmQosHandle(const char* filename,
 void TimeoutPoker::requestPmQosTimed(const char* filename,
         int priority, int max, int min, nsecs_t timeout)
 {
+    if (timeout == 0)
+        return;
     pushEvent(new PmQosOpenTimedEvent(
                 filename, priority, max, min, timeout));
 }
@@ -188,7 +192,7 @@ int TimeoutPoker::PokeHandler::generateNewKey(void)
     return mKey++;
 }
 
-TimeoutPoker::PokeHandler::PokeHandler(__attribute__ ((unused)) TimeoutPoker* poker, Barrier* readyToRun) :
+TimeoutPoker::PokeHandler::PokeHandler(Barrier* readyToRun) :
     mKey(0)
 {
     mWorker = new LooperThread(readyToRun);

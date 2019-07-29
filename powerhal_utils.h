@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
- * Copyright (c) 2016, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2013-2016, NVIDIA CORPORATION.  All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,8 @@
 
 #include <utils/Log.h>
 #include <cutils/properties.h>
+
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
 
 /* sysfs utilities */
 void sysfs_write(const char *path, const char *s);

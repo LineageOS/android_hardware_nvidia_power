@@ -1,8 +1,8 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
- * Copyright (c) 2012-2015, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2012-2017, NVIDIA CORPORATION.  All rights reserved.
  * Copyright (C) 2015 The CyanogenMod Project
- * Copyright (C) 2017 The LineageOS Project
+ * Copyright (C) 2017-2019 The LineageOS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,25 +27,13 @@
 #include "timeoutpoker.h"
 #include <semaphore.h>
 
-#define MAX_CHARS 32
-#define MAX_INPUT_DEV_COUNT 12
-#define MAX_USE_CASE_STRING_SIZE 80
-#define MAX_POWER_HINT_COUNT POWER_HINT_SET_PROFILE+1
+#include <vector>
 
-#define DEFAULT_MIN_ONLINE_CPUS     2
-#define DEFAULT_MAX_ONLINE_CPUS     0
-#define DEFAULT_FREQ                700
+#define MAX_CHARS 32
 
 #define POWER_CAP_PROP "persist.sys.NV_PBC_PWR_LIMIT"
-#define SLEEP_INTERVAL_SECS 1
-
-//sys node control entry
-#define SYS_NODE_PRISM_ENABLE           "/sys/devices/platform/host1x/tegradc.0/smartdimmer/enable"
-#define SYS_NODE_CPU0_MAX_FREQ          "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq"
 
 //PMQOS control entry
-#define PMQOS_MAX_ONLINE_CPUS           "/dev/max_online_cpus"
-#define PMQOS_MAX_CPU_FREQ              "/dev/cpu_freq_max"
 #define PMQOS_CONSTRAINT_CPU_FREQ       "/dev/constraint_cpu_freq"
 #define PMQOS_CONSTRAINT_GPU_FREQ       "/dev/constraint_gpu_freq"
 #define PMQOS_CONSTRAINT_ONLINE_CPUS    "/dev/constraint_online_cpus"
@@ -58,8 +46,93 @@
 #define PM_QOS_BOOST_PRIORITY 35
 #define PM_QOS_APP_PROFILE_PRIORITY  40
 
-// Lineage power hints
+#define HARDWARE_TYPE_PROP "ro.hardware"
+
+#define NV_POWER_HINT_START POWER_HINT_VSYNC
+
+/*
+ * Power hint identifiers passed to (*powerHint)
+ */
+typedef enum {
+    NV_POWER_HINT_VSYNC                 = POWER_HINT_VSYNC,
+    NV_POWER_HINT_INTERACTION           = POWER_HINT_INTERACTION,
+    /* DO NOT USE POWER_HINT_VIDEO_ENCODE/_DECODE!  They will be removed in
+     * KLP.
+     */
+    NV_POWER_HINT_VIDEO_ENCODE          = POWER_HINT_VIDEO_ENCODE,
+    NV_POWER_HINT_VIDEO_DECODE          = POWER_HINT_VIDEO_DECODE,
+    NV_POWER_HINT_LOW_POWER             = POWER_HINT_LOW_POWER,
+    NV_POWER_HINT_SUSTAINED_PERFORMANCE = POWER_HINT_SUSTAINED_PERFORMANCE,
+    NV_POWER_HINT_VR_MODE               = POWER_HINT_VR_MODE,
+    NV_POWER_HINT_LAUNCH                = POWER_HINT_LAUNCH,
+
+    /* NVIDIA added hints start from here */
+    POWER_HINT_APP_PROFILE           = 0x00000009,
+    POWER_HINT_APP_LAUNCH            = 0x0000000A,
+    POWER_HINT_SHIELD_STREAMING      = 0x0000000B,
+    POWER_HINT_HIGH_RES_VIDEO        = 0x0000000C,
+    POWER_HINT_POWER_MODE            = 0x0000000D,
+    POWER_HINT_MIRACAST              = 0x0000000E,
+    POWER_HINT_DISPLAY_ROTATION      = 0x0000000F,
+    POWER_HINT_CAMERA                = 0x00000010,
+    POWER_HINT_MULTITHREAD_BOOST     = 0x00000011,
+    POWER_HINT_AUDIO_SPEAKER         = 0x00000012,
+    POWER_HINT_AUDIO_OTHER           = 0X00000013,
+    POWER_HINT_AUDIO_LOW_LATENCY     = 0x00000014,
+    POWER_HINT_CANCEL_PHS_HINT       = 0x00000015,
+    POWER_HINT_FRAMEWORKS_UI         = 0x00000016,
+
+    POWER_HINT_COUNT
+} nv_power_hint_t;
+
 const static power_hint_t POWER_HINT_SET_PROFILE = (power_hint_t)0x00000111;
+
+/*
+ * App profile knobs, passed as data with POWER_HINT_APP_PROFILE hint
+ */
+
+typedef enum {
+    APP_PROFILE_CPU_SCALING_MIN_FREQ,
+    APP_PROFILE_CPU_CORE_BIAS,
+    APP_PROFILE_CPU_MAX_NORMAL_FREQ_IN_PERCENTAGE,
+    APP_PROFILE_CPU_MAX_CORE,
+    APP_PROFILE_GPU_CBUS_CAP_LEVEL,
+    APP_PROFILE_GPU_SCALING,
+    APP_PROFILE_EDP_MODE,
+    APP_PROFILE_PBC_POWER,
+    APP_PROFILE_FAN_CAP,
+    APP_PROFILE_VOLT_TEMP_MODE,
+    APP_PROFILE_PRISM_CONTROL_ENABLE,
+    APP_PROFILE_CPU_MIN_CORE,
+    APP_PROFILE_COUNT,
+} app_profile_knob;
+
+/*
+ * Camera power hint enum, passed as data with POWER_HINT_CAMERA hint
+ */
+
+typedef enum {
+    CAMERA_HINT_STILL_PREVIEW_POWER,
+    CAMERA_HINT_VIDEO_PREVIEW_POWER,
+    CAMERA_HINT_VIDEO_RECORD_POWER,
+    CAMERA_HINT_PERF,
+    CAMERA_HINT_FPS,
+    CAMERA_HINT_RESET,
+    CAMERA_HINT_COUNT,
+    CAMERA_HINT_HIGH_FPS_VIDEO_RECORD_POWER,
+} camera_hint_t;
+
+/*
+ * NvCPL Power Mode power hint enum, passed as data with POWER_HINT_POWER_MODE
+ * hint
+ */
+typedef enum {
+    NVCPL_HINT_MAX_PERF,
+    NVCPL_HINT_OPT_PERF,
+    NVCPL_HINT_BAT_SAVE,
+    NVCPL_HINT_USR_CUST,
+    NVCPL_HINT_COUNT,
+} nvcpl_hint_t;
 
 struct input_dev_map {
     int dev_id;
@@ -76,55 +149,68 @@ typedef struct interactive_data {
     const char *go_hispeed_load;
 } interactive_data_t;
 
-enum {
-    PROFILE_POWER_SAVE,
-    PROFILE_BALANCED,
-    PROFILE_HIGH_PERFORMANCE,
-    PROFILE_BIAS_POWER,
-    PROFILE_BIAS_PERFORMANCE,
-    PROFILE_MAX
-};
+typedef struct power_hint_data {
+    int min;
+    int max;
+    int time_ms;
+} power_hint_data_t;
 
-typedef int (*sendhints_fn_t)(uint32_t client_tag, ...);
-typedef void (*cancelhints_fn_t)(uint32_t usecase, uint32_t client_tag);
+typedef struct cpu_cluster_data {
+    const char *pmqos_constraint_path;
+    const char *available_freqs_path;
+    int *available_frequencies;
+    int num_available_frequencies;
+    int fd_app_min_freq;
+    int fd_app_max_freq;
+    int fd_vsync_min_freq;
+
+    power_hint_data_t hints[POWER_HINT_COUNT];
+} cpu_cluster_data_t;
 
 struct powerhal_info {
     TimeoutPoker* mTimeoutPoker;
 
-    int *available_frequencies;
-    int num_available_frequencies;
-
-    /* Maximum LP CPU frequency */
-    int lp_max_frequency;
-
-    int interaction_boost_frequency;
-    int animation_boost_frequency;
-
-    /* maximum frequency for the current cpufreq policy */
-    int cpu0_max_frequency;
+    std::vector<cpu_cluster_data_t> cpu_clusters;
 
     bool ftrace_enable;
-
-    /* Number of devices requesting Power HAL service */
-    int input_cnt;
+    bool no_cpufreq_interactive;
+    bool no_sclk_boost;
 
     /* Holds input devices */
-    struct input_dev_map* input_devs;
+    std::vector<struct input_dev_map> input_devs;
 
     /* Time last hint was sent - in usec */
-    uint64_t hint_time[MAX_POWER_HINT_COUNT];
-    uint64_t hint_interval[MAX_POWER_HINT_COUNT];
+    uint64_t hint_time[POWER_HINT_COUNT];
+    uint64_t hint_interval[POWER_HINT_COUNT];
+
+    power_hint_data_t gpu_freq_hints[POWER_HINT_COUNT];
+    power_hint_data_t emc_freq_hints[POWER_HINT_COUNT];
+    power_hint_data_t online_cpu_hints[POWER_HINT_COUNT];
+
+    int boot_boost_time_ms;
+
+    /* AppProfile defaults */
+    struct {
+        int min_freq;
+        int max_freq;
+        int core_cap;
+        int gpu_cap;
+        int fan_cap;
+        int power_cap;
+    } defaults;
+
+    /* Features on platform */
+    struct {
+        bool fan;
+    } features;
 
     /* File descriptors used for hints and app profiles */
     struct {
-        int vsync_min_cpu;
+        int app_max_online_cpus;
+        int app_min_online_cpus;
+        int app_max_gpu;
+        int app_min_gpu;
     } fds;
-
-    /* PHS hint function pointers. Loaded in runtime since powerhal can't
-     * depend on libphs in link time. */
-    void *libphs_handle;
-    sendhints_fn_t NvVaSendThroughputHints;
-    cancelhints_fn_t NvCancelThroughputHints;
 
     /* Switching CPU/EMC freq ratio based on display state */
     bool switch_cpu_emc_limit_enabled;
@@ -153,7 +239,4 @@ void common_power_set_interactive(struct powerhal_info *pInfo, int on);
 void common_power_hint(struct powerhal_info *pInfo,
                             power_hint_t hint, void *data);
 
-void set_power_level_floor(int on);
-
 #endif  //COMMON_POWER_HAL_H
-
