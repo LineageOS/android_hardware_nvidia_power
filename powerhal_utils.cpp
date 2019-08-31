@@ -16,6 +16,8 @@
 #define LOG_TAG "powerHAL::common"
 
 #include "powerhal_utils.h"
+#include <stdio.h>
+#include <unistd.h>
 
 void sysfs_write(const char *path, const char *s)
 {
