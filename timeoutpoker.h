@@ -13,7 +13,6 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include <android/looper.h>
 #include <utils/threads.h>
 #include <utils/Errors.h>
 #include <utils/List.h>
@@ -32,6 +31,21 @@
 //run an event after a timeout on the IPC threads
 
 using namespace android;
+
+//ALooper defines
+enum {
+    ALOOPER_POLL_WAKE = -1,
+    ALOOPER_POLL_CALLBACK = -2,
+    ALOOPER_POLL_TIMEOUT = -3,
+    ALOOPER_POLL_ERROR = -4,
+};
+enum {
+    ALOOPER_EVENT_INPUT = 1 << 0,
+    ALOOPER_EVENT_OUTPUT = 1 << 1,
+    ALOOPER_EVENT_ERROR = 1 << 2,
+    ALOOPER_EVENT_HANGUP = 1 << 3,
+    ALOOPER_EVENT_INVALID = 1 << 4,
+};
 
 int createConstraintCommand(char* command, int size, int priority, int max, int min);
 
