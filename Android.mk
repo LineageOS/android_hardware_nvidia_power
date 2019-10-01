@@ -23,7 +23,6 @@ LOCAL_INIT_RC := vendor.nvidia.hardware.power@1.0-service.rc
 LOCAL_SHARED_LIBRARIES := \
     libhardware \
     libhidlbase \
-    libhidltransport \
     liblog \
     libcutils \
     libutils \
