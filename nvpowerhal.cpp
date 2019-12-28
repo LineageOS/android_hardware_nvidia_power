@@ -32,14 +32,7 @@
 static int get_system_power_mode(void);
 static void set_interactive_governor(int mode);
 
-static const interactive_data_t interactive_data_array[NVCPL_HINT_COUNT+1] =
-{
-    { "1122000", "65 304000:75 1122000:80", "19000", "20000", "0", "41000", "90" },
-    { "1020000", "65 256000:75 1020000:80", "19000", "20000", "0", "30000", "99" },
-    { "640000", "65 256000:75 640000:80", "80000", "20000", "2", "30000", "99" },
-    { "1020000", "65 256000:75 1020000:80", "19000", "20000", "0", "30000", "99" },
-    { "420000", "80",                     "80000", "300000","2", "30000", "99" }
-};
+extern interactive_data_t interactive_data_array[NVCPL_HINT_COUNT+1];
 #endif
 
 // CPU/EMC ratio table source sysfs
@@ -528,6 +521,8 @@ static void app_profile_set(struct powerhal_info *pInfo, app_profile_knob *data)
 
 void common_power_init(__attribute__((unused)) struct power_module *module, struct powerhal_info *pInfo)
 {
+    char governor[80] = "";
+
     if (!pInfo)
         return;
 
@@ -543,6 +538,11 @@ void common_power_init(__attribute__((unused)) struct power_module *module, stru
                                             ms2ns(pInfo->boot_boost_time_ms));
 
     pInfo->switch_cpu_emc_limit_enabled = sysfs_exists(CPU_EMC_RATIO_SRC_NODE);
+
+    // Disable interactive governor handling if no cores are detected using it
+    if (get_scaling_governor(governor, sizeof(governor)) == -1 ||
+        !is_interactive_governor(governor))
+        pInfo->no_cpufreq_interactive = true;
 }
 
 void common_power_set_interactive(__attribute__((unused)) struct power_module *module, struct powerhal_info *pInfo, int on)
@@ -591,12 +591,6 @@ void common_power_set_interactive(__attribute__((unused)) struct power_module *m
         power_mode = NVCPL_HINT_COUNT;
     }
     set_interactive_governor(power_mode);
-#else
-    sysfs_write("/sys/devices/system/cpu/cpufreq/interactive/hispeed_freq", (on == 0)?"420000":"624000");
-    sysfs_write("/sys/devices/system/cpu/cpufreq/interactive/target_loads", (on == 0)?"45 312000:75 564000:85":"65 228000:75 624000:85");
-    sysfs_write("/sys/devices/system/cpu/cpufreq/interactive/above_hispeed_delay", (on == 0)?"80000":"19000");
-    sysfs_write("/sys/devices/system/cpu/cpufreq/interactive/timer_rate", (on == 0)?"300000":"20000");
-    sysfs_write("/sys/devices/system/cpu/cpufreq/interactive/boost_factor", (on == 0)?"2":"0");
 #endif
 }
 
