@@ -100,6 +100,9 @@ static void init_default_cpu_hints(power_hint_data_t *hints)
     hints[POWER_HINT_INTERACTION] = {           1326000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 100};
+    hints[POWER_HINT_LAUNCH] = {                INT_MAX,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1500};
     hints[POWER_HINT_APP_LAUNCH] = {            INT_MAX,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1500};
@@ -138,6 +141,9 @@ static void init_default_gpu_hints(power_hint_data_t *hints)
     hints[POWER_HINT_INTERACTION] = {           540000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 2000};
+    hints[POWER_HINT_LAUNCH] = {                180000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1500};
     hints[POWER_HINT_APP_LAUNCH] = {            180000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1500};
@@ -151,6 +157,9 @@ static void init_default_emc_hints(power_hint_data_t *hints)
     hints[POWER_HINT_INTERACTION] = {           396000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 2000};
+    hints[POWER_HINT_LAUNCH] = {                792000,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1500};
     hints[POWER_HINT_APP_LAUNCH] = {            792000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1500};
@@ -170,6 +179,9 @@ static void init_default_online_cpu_hints(power_hint_data_t *hints)
     hints[POWER_HINT_MULTITHREAD_BOOST] = {     4,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 2000};
+    hints[POWER_HINT_LAUNCH] = {                2,
+                                                PM_QOS_DEFAULT_VALUE,
+                                                1500};
     hints[POWER_HINT_APP_LAUNCH] = {            2,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1500};
@@ -196,6 +208,7 @@ static void init_default_hint_intervals(struct powerhal_info *pInfo)
     pInfo->hint_interval[POWER_HINT_VSYNC] = 0;
     pInfo->hint_interval[POWER_HINT_INTERACTION] = 90;
     pInfo->hint_interval[POWER_HINT_APP_PROFILE] = 200;
+    pInfo->hint_interval[POWER_HINT_LAUNCH] = 1500;
     pInfo->hint_interval[POWER_HINT_APP_LAUNCH] = 1500;
     pInfo->hint_interval[POWER_HINT_SHIELD_STREAMING] = 500;
     pInfo->hint_interval[POWER_HINT_HIGH_RES_VIDEO] = 500;
@@ -713,6 +726,7 @@ void common_power_hint(__attribute__((unused)) struct power_module *module, stru
         break;
     case POWER_HINT_MULTITHREAD_BOOST:
     case POWER_HINT_APP_LAUNCH:
+    case POWER_HINT_LAUNCH:
     case POWER_HINT_SHIELD_STREAMING:
     case POWER_HINT_HIGH_RES_VIDEO:
     case POWER_HINT_VIDEO_DECODE:
