@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (C) 2019 The LineageOS Project
  *
  * NVIDIA CORPORATION and its licensors retain all intellectual property
  * and proprietary rights in and to this software, related documentation
@@ -25,9 +26,9 @@
 #define HDA_TEMP (STATUS_OFFSET + HDA_TEMP_OFFSETOFFSET)
 
 /* Need better method instead of Hard code the sysfs node */
-#define POWER_CONTROL_PATH "/sys/devices/platform/tegra-sata.0/ata1/power/control"
-#define AUTO_SUSPEND_DELAY_PATH "/sys/devices/platform/tegra-sata.0/ata1/host0/target0:0:0/0:0:0:0/power/autosuspend_delay_ms"
-#define HOST_CONTROL_PATH "/sys/devices/platform/tegra-sata.0/ata1/host0/target0:0:0/0:0:0:0/power/control"
+#define POWER_CONTROL_PATH "/sys/devices/tegra-sata.0/ata1/power/control"
+#define AUTO_SUSPEND_DELAY_PATH "/sys/devices/tegra-sata.0/ata1/host0/target0:0:0/0:0:0:0/power/autosuspend_delay_ms"
+#define HOST_CONTROL_PATH "/sys/devices/tegra-sata.0/ata1/host0/target0:0:0/0:0:0:0/power/control"
 #define VALUE_AUTO "auto"
 #define VALUE_ON "on"
 
