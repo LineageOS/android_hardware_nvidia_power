@@ -759,6 +759,14 @@ void common_power_hint(__attribute__((unused)) struct power_module *module, stru
         }
 #endif
         break;
+    case POWER_HINT_LOW_POWER:
+#ifdef POWER_MODE_SET_INTERACTIVE
+	{
+            nvcpl_hint_t new_state = (data ? NVCPL_HINT_BAT_SAVE : NVCPL_HINT_OPT_PERF);
+            set_power_mode_hint(pInfo, &new_state);
+	}
+#endif
+        break;
 #ifdef USE_NVPHS
     case POWER_HINT_FRAMEWORKS_UI:
         NvPHSSendThroughputHints(*((int*)data), PHS_FLAG_IMMEDIATE, NvUsecase_ui, NvHintType_TransientCpuLoad, INT_MAX, NVPHS_IMMEDIATE_MODE_MIN_HINT_TIMEOUT_MS, NvUsecase_NULL);
