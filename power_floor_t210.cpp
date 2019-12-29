@@ -18,12 +18,7 @@
 #include "powerhal.h"
 #include <pthread.h>
 #include <sys/prctl.h>
-#ifdef ENABLE_SATA_STANDBY_MODE
-#include "tegra_sata_hal.h"
-#endif
 
-#define FOSTER_E_HDD    "/dev/block/sda"
-#define HDD_STANDBY_TIMEOUT     60
 #define BRICK_STATE_PROP "persist.vendor.power.brick"
 #define CPU_CC_STATE_NODE "/sys/kernel/debug/cpuidle_t210/fast_cluster_states_enable"
 #define CPU_CC_IDLE 0x1
@@ -53,12 +48,7 @@
 #define WIFI_PM_ENABLE "pm_enable"
 #define WIFI_PM_DISABLE "pm_disable"
 
-static struct powerhal_info *pInfo;
-static struct input_dev_map input_devs[] = {
-        {-1, "touch\n"},
-       };
-
-static bool booting;
+static bool booting = 1;
 /* Array of range for bricks, except first value */
 static char brick_whitelist[][7] = {
     "PBTEST",
@@ -170,7 +160,7 @@ static bool is_brick_whitelisted(char * brick)
     return false;
 }
 
-static void set_power_level_floor(int on)
+void set_power_level_floor(int on)
 {
     char brick[PROPERTY_VALUE_MAX+1];
     char platform[PROPERTY_VALUE_MAX+1];
@@ -211,110 +201,3 @@ static void set_power_level_floor(int on)
     sysfs_write_int(SOC_DISABLE_DVFS_NODE, 1);
     set_gpu_knobs(0);
 }
-
-static void loki_e_power_init(struct power_module *module)
-{
-    /*
-    * for pre-O compability
-    * remove this after O upgrade
-    */
-    if (!pInfo) {
-        pInfo = new powerhal_info();
-        common_power_open(pInfo);
-    }
-
-    if (!pInfo) {
-        ALOGE("PowerHal: %s: check if failure on device open.", __func__);
-        return;
-    }
-    size_t input_cnt = sizeof(input_devs)/sizeof(struct input_dev_map);
-    pInfo->input_devs.insert(pInfo->input_devs.end(),
-                    &input_devs[0], &input_devs[input_cnt]);
-
-    booting = 1;
-    common_power_init(module, pInfo);
-}
-
-static void loki_e_power_set_interactive(struct power_module *module, int on)
-{
-    int error = 0;
-
-    common_power_set_interactive(module, pInfo, on);
-    set_power_level_floor(on);
-
-#ifdef ENABLE_SATA_STANDBY_MODE
-    if (!access(FOSTER_E_HDD, F_OK)) {
-        /*
-        * Turn-off Foster HDD at display off
-        */
-        ALOGI("PowerHal: Display is %s, set HDD to %s standby mode.", on?"on":"off", on?"disable":"enter");
-        if (on) {
-            error = hdd_disable_standby_timer();
-            if (error)
-                ALOGE("PowerHal: Failed to set standby timer, error: %d", error);
-        }
-        else {
-            error = hdd_set_standby_timer(HDD_STANDBY_TIMEOUT);
-            if (error)
-                ALOGE("PowerHal: Failed to set standby timer, error: %d", error);
-        }
-    }
-#endif
-}
-
-static void loki_e_power_hint(struct power_module *module, power_hint_t hint,
-                            void *data)
-{
-    common_power_hint(module, pInfo, hint, data);
-}
-
-static int loki_e_power_open(const hw_module_t *module, const char *name,
-                            hw_device_t **device)
-{
-    struct power_module *pdev;
-
-    if (strcmp(name, POWER_HARDWARE_MODULE_ID) || (!module))
-        return -EINVAL;
-
-    if (!pInfo) {
-        pInfo = new powerhal_info();
-    }
-
-    pdev = (struct power_module *)calloc(1, sizeof(struct power_module));
-    if (!pdev) {
-        ALOGE("PowerHal: %s failed to alloc memory for power module interface!", __func__);
-        return -ENOMEM;
-    }
-    memcpy((void *)&pdev->common, (const void *)module, sizeof(hw_module_t));
-    pdev->init = loki_e_power_init,
-    pdev->setInteractive = loki_e_power_set_interactive,
-    pdev->powerHint = loki_e_power_hint,
-
-    *device = (hw_device_t *)pdev;
-
-    common_power_open(pInfo);
-
-    return 0;
-}
-
-static struct hw_module_methods_t power_module_methods = {
-    .open = loki_e_power_open,
-};
-
-struct power_module HAL_MODULE_INFO_SYM = {
-    .common = {
-        .tag = HARDWARE_MODULE_TAG,
-        .module_api_version = POWER_MODULE_API_VERSION_0_2,
-        .hal_api_version = HARDWARE_HAL_API_VERSION,
-        .id = POWER_HARDWARE_MODULE_ID,
-        .name = "Loki-E Power HAL",
-        .author = "NVIDIA",
-        .methods = &power_module_methods,
-        .dso = NULL,
-        .reserved = {0},
-    },
-
-    .init = loki_e_power_init,
-    .setInteractive = loki_e_power_set_interactive,
-    .powerHint = loki_e_power_hint,
-};

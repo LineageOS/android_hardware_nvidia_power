@@ -28,11 +28,15 @@
 #include "phs.h"
 #endif
 
-#ifdef POWER_MODE_SET_INTERACTIVE
-static int get_system_power_mode(void);
-static void set_interactive_governor(int mode);
+using ::vendor::nvidia::hardware::power::V1_0::AppProfileKnob;
+using ::vendor::nvidia::hardware::power::V1_0::ExtPowerHint;
+using ::vendor::nvidia::hardware::power::V1_0::NvCPLHintData;
 
-extern interactive_data_t interactive_data_array[NVCPL_HINT_COUNT+1];
+#ifdef POWER_MODE_SET_INTERACTIVE
+static NvCPLHintData get_system_power_mode(void);
+static void set_interactive_governor(NvCPLHintData mode);
+
+std::map<NvCPLHintData,interactive_data_t> interactive_data_array;
 #endif
 
 // CPU/EMC ratio table source sysfs
@@ -73,15 +77,10 @@ static void find_input_device_ids(struct powerhal_info *pInfo)
     }
 }
 
-static int check_hint(struct powerhal_info *pInfo, int hint, uint64_t *t)
+static int check_hint(struct powerhal_info *pInfo, ExtPowerHint hint, uint64_t *t)
 {
     struct timespec ts;
     uint64_t time;
-
-    if (hint < NV_POWER_HINT_START || hint >= POWER_HINT_COUNT) {
-        ALOGE("Invalid power hint: 0x%x", hint);
-        return -1;
-    }
 
     clock_gettime(CLOCK_MONOTONIC, &ts);
     time = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
@@ -95,109 +94,109 @@ static int check_hint(struct powerhal_info *pInfo, int hint, uint64_t *t)
     return 0;
 }
 
-static void init_default_cpu_hints(power_hint_data_t *hints)
+static void init_default_cpu_hints(std::map<ExtPowerHint,power_hint_data_t>& hints)
 {
-    hints[POWER_HINT_INTERACTION] = {           1326000,
+    hints[ExtPowerHint::INTERACTION] = {        1326000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 100};
-    hints[POWER_HINT_LAUNCH] = {                INT_MAX,
+    hints[ExtPowerHint::LAUNCH] = {             INT_MAX,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1500};
-    hints[POWER_HINT_APP_LAUNCH] = {            INT_MAX,
+    hints[ExtPowerHint::APP_LAUNCH] = {         INT_MAX,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1500};
-    hints[POWER_HINT_SHIELD_STREAMING] = {      816000,
+    hints[ExtPowerHint::SHIELD_STREAMING] = {   816000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1000};
-    hints[POWER_HINT_HIGH_RES_VIDEO] = {        816000,
+    hints[ExtPowerHint::HIGH_RES_VIDEO] = {     816000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1000};
-    hints[POWER_HINT_VIDEO_DECODE] = {          710000,
+    hints[ExtPowerHint::VIDEO_DECODE] = {       710000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1000};
-    hints[POWER_HINT_MIRACAST] = {              816000,
+    hints[ExtPowerHint::MIRACAST] = {           816000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1000};
-    hints[POWER_HINT_DISPLAY_ROTATION] = {      1500000,
+    hints[ExtPowerHint::DISPLAY_ROTATION] = {   1500000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 2000};
-    hints[POWER_HINT_AUDIO_SPEAKER] = {         512000,
+    hints[ExtPowerHint::AUDIO_SPEAKER] = {      512000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1000};
-    hints[POWER_HINT_AUDIO_OTHER] = {           512000,
+    hints[ExtPowerHint::AUDIO_OTHER] = {        512000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1000};
-    hints[POWER_HINT_AUDIO_LOW_LATENCY] = {     1000000,
+    hints[ExtPowerHint::AUDIO_LOW_LATENCY] = {  1000000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1000};
     // VSYNC boost ignores duration
-    hints[POWER_HINT_VSYNC] = {                 300000,
+    hints[ExtPowerHint::VSYNC] = {              300000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1};
 }
 
-static void init_default_gpu_hints(power_hint_data_t *hints)
+static void init_default_gpu_hints(std::map<ExtPowerHint,power_hint_data_t>& hints)
 {
-    hints[POWER_HINT_INTERACTION] = {           540000,
+    hints[ExtPowerHint::INTERACTION] = {        540000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 2000};
-    hints[POWER_HINT_LAUNCH] = {                180000,
+    hints[ExtPowerHint::LAUNCH] = {             180000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1500};
-    hints[POWER_HINT_APP_LAUNCH] = {            180000,
+    hints[ExtPowerHint::APP_LAUNCH] = {         180000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1500};
-    hints[POWER_HINT_DISPLAY_ROTATION] = {      252000,
+    hints[ExtPowerHint::DISPLAY_ROTATION] = {   252000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 2000};
 }
 
-static void init_default_emc_hints(power_hint_data_t *hints)
+static void init_default_emc_hints(std::map<ExtPowerHint,power_hint_data_t>& hints)
 {
-    hints[POWER_HINT_INTERACTION] = {           396000,
+    hints[ExtPowerHint::INTERACTION] = {        396000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 2000};
-    hints[POWER_HINT_LAUNCH] = {                792000,
+    hints[ExtPowerHint::LAUNCH] = {             792000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1500};
-    hints[POWER_HINT_APP_LAUNCH] = {            792000,
+    hints[ExtPowerHint::APP_LAUNCH] = {         792000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1500};
-    hints[POWER_HINT_DISPLAY_ROTATION] = {      400000,
+    hints[ExtPowerHint::DISPLAY_ROTATION] = {   400000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 2000};
-    hints[POWER_HINT_AUDIO_LOW_LATENCY] = {     300000,
+    hints[ExtPowerHint::AUDIO_LOW_LATENCY] = {  300000,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1000};
 }
 
-static void init_default_online_cpu_hints(power_hint_data_t *hints)
+static void init_default_online_cpu_hints(std::map<ExtPowerHint,power_hint_data_t>& hints)
 {
-    hints[POWER_HINT_INTERACTION] = {           2,
+    hints[ExtPowerHint::INTERACTION] = {        2,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 2000};
-    hints[POWER_HINT_MULTITHREAD_BOOST] = {     4,
+    hints[ExtPowerHint::MULTITHREAD_BOOST] = {  4,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 2000};
-    hints[POWER_HINT_LAUNCH] = {                2,
+    hints[ExtPowerHint::LAUNCH] = {             2,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1500};
-    hints[POWER_HINT_APP_LAUNCH] = {            2,
+    hints[ExtPowerHint::APP_LAUNCH] = {         2,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1500};
-    hints[POWER_HINT_SHIELD_STREAMING] = {      2,
+    hints[ExtPowerHint::SHIELD_STREAMING] = {   2,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1000};
-    hints[POWER_HINT_HIGH_RES_VIDEO] = {        2,
+    hints[ExtPowerHint::HIGH_RES_VIDEO] = {     2,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1000};
-    hints[POWER_HINT_VIDEO_DECODE] = {          1,
+    hints[ExtPowerHint::VIDEO_DECODE] = {       1,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 1000};
-    hints[POWER_HINT_DISPLAY_ROTATION] = {      2,
+    hints[ExtPowerHint::DISPLAY_ROTATION] = {   2,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 2000};
-    hints[POWER_HINT_AUDIO_LOW_LATENCY] = {      4,
+    hints[ExtPowerHint::AUDIO_LOW_LATENCY] = {  4,
                                                 PM_QOS_DEFAULT_VALUE,
                                                 2000};
 
@@ -205,20 +204,20 @@ static void init_default_online_cpu_hints(power_hint_data_t *hints)
 
 static void init_default_hint_intervals(struct powerhal_info *pInfo)
 {
-    pInfo->hint_interval[POWER_HINT_VSYNC] = 0;
-    pInfo->hint_interval[POWER_HINT_INTERACTION] = 90;
-    pInfo->hint_interval[POWER_HINT_APP_PROFILE] = 200;
-    pInfo->hint_interval[POWER_HINT_LAUNCH] = 1500;
-    pInfo->hint_interval[POWER_HINT_APP_LAUNCH] = 1500;
-    pInfo->hint_interval[POWER_HINT_SHIELD_STREAMING] = 500;
-    pInfo->hint_interval[POWER_HINT_HIGH_RES_VIDEO] = 500;
-    pInfo->hint_interval[POWER_HINT_VIDEO_DECODE] = 500;
-    pInfo->hint_interval[POWER_HINT_MIRACAST] = 500;
-    pInfo->hint_interval[POWER_HINT_AUDIO_SPEAKER] = 500;
-    pInfo->hint_interval[POWER_HINT_AUDIO_OTHER] = 500;
-    pInfo->hint_interval[POWER_HINT_AUDIO_LOW_LATENCY] = 500;
-    pInfo->hint_interval[POWER_HINT_DISPLAY_ROTATION] = 200;
-    pInfo->hint_interval[POWER_HINT_POWER_MODE] = 0;
+    pInfo->hint_interval[ExtPowerHint::VSYNC]             = 0;
+    pInfo->hint_interval[ExtPowerHint::INTERACTION]       = 90;
+    pInfo->hint_interval[ExtPowerHint::APP_PROFILE]       = 200;
+    pInfo->hint_interval[ExtPowerHint::LAUNCH]            = 1500;
+    pInfo->hint_interval[ExtPowerHint::APP_LAUNCH]        = 1500;
+    pInfo->hint_interval[ExtPowerHint::SHIELD_STREAMING]  = 500;
+    pInfo->hint_interval[ExtPowerHint::HIGH_RES_VIDEO]    = 500;
+    pInfo->hint_interval[ExtPowerHint::VIDEO_DECODE]      = 500;
+    pInfo->hint_interval[ExtPowerHint::MIRACAST]          = 500;
+    pInfo->hint_interval[ExtPowerHint::AUDIO_SPEAKER]     = 500;
+    pInfo->hint_interval[ExtPowerHint::AUDIO_OTHER]       = 500;
+    pInfo->hint_interval[ExtPowerHint::AUDIO_LOW_LATENCY] = 500;
+    pInfo->hint_interval[ExtPowerHint::DISPLAY_ROTATION]  = 200;
+    pInfo->hint_interval[ExtPowerHint::POWER_MODE]        = 0;
 }
 
 static void init_default_hint_parameters(struct powerhal_info *pInfo)
@@ -342,7 +341,7 @@ static void set_vsync_min_cpu_freq(struct powerhal_info *pInfo, int enabled)
                 cpu_cluster.fd_vsync_min_freq =
                 pInfo->mTimeoutPoker->requestPmQos(cpu_cluster.pmqos_constraint_path,
                                     PM_QOS_BOOST_PRIORITY, PM_QOS_DEFAULT_VALUE,
-                                    cpu_cluster.hints[POWER_HINT_VSYNC].min);
+                                    cpu_cluster.hints[ExtPowerHint::VSYNC].min);
     } else {
         for (auto &cpu_cluster : pInfo->cpu_clusters)
             if (cpu_cluster.fd_vsync_min_freq >= 0) {
@@ -351,7 +350,7 @@ static void set_vsync_min_cpu_freq(struct powerhal_info *pInfo, int enabled)
             }
     }
 
-    ALOGV("%s: set min CPU floor =%i", __func__, pInfo->cpu_clusters[0].hints[POWER_HINT_VSYNC].min);
+    ALOGV("%s: set min CPU floor =%i", __func__, pInfo->cpu_clusters[0].hints[ExtPowerHint::VSYNC].min);
 }
 
 static void set_app_profile_min_cpu_freq(struct powerhal_info *pInfo, int value)
@@ -490,40 +489,40 @@ static void set_fan_cap(struct powerhal_info *pInfo, int value)
     sysfs_write_int("/sys/devices/platform/pwm-fan/pwm_cap", value);
 }
 
-static void app_profile_set(struct powerhal_info *pInfo, app_profile_knob *data)
+static void app_profile_set(struct powerhal_info *pInfo, std::map<AppProfileKnob,int>& data)
 {
-    int i;
+    AppProfileKnob i;
 
-    for (i = 0; i < APP_PROFILE_COUNT; i++)
+    for (i = AppProfileKnob::APP_PROFILE_CPU_SCALING_MIN_FREQ; i < AppProfileKnob::APP_PROFILE_COUNT; i=static_cast<AppProfileKnob>(static_cast<int>(i)+1))
     {
         switch (i) {
-            case APP_PROFILE_CPU_SCALING_MIN_FREQ:
+            case AppProfileKnob::APP_PROFILE_CPU_SCALING_MIN_FREQ:
                 set_app_profile_min_cpu_freq(pInfo, data[i]);
                 break;
-            case APP_PROFILE_CPU_MAX_NORMAL_FREQ_IN_PERCENTAGE:
+            case AppProfileKnob::APP_PROFILE_CPU_MAX_NORMAL_FREQ_IN_PERCENTAGE:
                 //As user operation take the highest priority
                 //Other cpu max freq related control should be before it.
                 set_app_profile_max_cpu_freq_percent(pInfo, data[i]);
                 break;
-            case APP_PROFILE_CPU_MAX_CORE:
+            case AppProfileKnob::APP_PROFILE_CPU_MAX_CORE:
                 set_app_profile_max_online_cpus(pInfo, data[i]);
                 break;
-            case APP_PROFILE_GPU_CBUS_CAP_LEVEL:
+            case AppProfileKnob::APP_PROFILE_GPU_CBUS_CAP_LEVEL:
                 set_app_profile_max_gpu_freq(pInfo, data[i]);
                 break;
-            case APP_PROFILE_GPU_SCALING:
+            case AppProfileKnob::APP_PROFILE_GPU_SCALING:
                 set_app_profile_min_gpu_freq(pInfo, data[i]);
                 break;
-            case APP_PROFILE_PRISM_CONTROL_ENABLE:
+            case AppProfileKnob::APP_PROFILE_PRISM_CONTROL_ENABLE:
                 set_prism_control_enable(pInfo, data[i]);
                 break;
-            case APP_PROFILE_CPU_MIN_CORE:
+            case AppProfileKnob::APP_PROFILE_CPU_MIN_CORE:
                 set_app_profile_min_online_cpus(pInfo, data[i]);
                 break;
-            case APP_PROFILE_FAN_CAP:
+            case AppProfileKnob::APP_PROFILE_FAN_CAP:
                 set_fan_cap(pInfo, data[i]);
                 break;
-            case APP_PROFILE_PBC_POWER:
+            case AppProfileKnob::APP_PROFILE_PBC_POWER:
                 set_pbc_power(pInfo, data[i]);
                 break;
             default:
@@ -532,7 +531,7 @@ static void app_profile_set(struct powerhal_info *pInfo, app_profile_knob *data)
     }
 }
 
-void common_power_init(__attribute__((unused)) struct power_module *module, struct powerhal_info *pInfo)
+void common_power_init(struct powerhal_info *pInfo)
 {
     char governor[80] = "";
 
@@ -554,11 +553,28 @@ void common_power_init(__attribute__((unused)) struct power_module *module, stru
 
     // Disable interactive governor handling if no cores are detected using it
     if (get_scaling_governor(governor, sizeof(governor)) == -1 ||
-        !is_interactive_governor(governor))
+        !is_interactive_governor(governor)) {
         pInfo->no_cpufreq_interactive = true;
+    } else {
+#if TARGET_TEGRA_VERSION == 124
+        interactive_data_array.emplace(NvCPLHintData::NVCPL_HINT_MAX_PERF, interactive_data_t({ "624000",  "65 224000:75 624000:85", "19000",  "20000", "0", "41000", "90" }));
+        interactive_data_array.emplace(NvCPLHintData::NVCPL_HINT_OPT_PERF, interactive_data_t({ "510000",  "65 256000:75 510000:85", "19000", "300000", "0", "30000", "99" }));
+        interactive_data_array.emplace(NvCPLHintData::NVCPL_HINT_BAT_SAVE, interactive_data_t({ "420000",  "45 312000:75 564000:85", "80000", "300000", "2", "30000", "99" }));
+        interactive_data_array.emplace(NvCPLHintData::NVCPL_HINT_USR_CUST, interactive_data_t({ "510000",  "65 256000:75 510000:85", "19000", "300000", "0", "30000", "99" }));
+        interactive_data_array.emplace(NvCPLHintData::NVCPL_HINT_COUNT,    interactive_data_t({ "420000",  "80",                     "80000", "300000", "2", "30000", "99" }));
+#elif TARGET_TEGRA_VERSION == 210
+        interactive_data_array.emplace(NvCPLHintData::NVCPL_HINT_MAX_PERF, interactive_data_t({ "1122000", "65 304000:75 1122000:80", "19000",  "20000", "0", "41000", "90" }));
+        interactive_data_array.emplace(NvCPLHintData::NVCPL_HINT_OPT_PERF, interactive_data_t({ "1020000", "65 256000:75 1020000:80", "19000",  "20000", "0", "30000", "99" }));
+        interactive_data_array.emplace(NvCPLHintData::NVCPL_HINT_BAT_SAVE, interactive_data_t({  "640000", "65 256000:75 640000:80",  "80000",  "20000", "2", "30000", "99" }));
+        interactive_data_array.emplace(NvCPLHintData::NVCPL_HINT_USR_CUST, interactive_data_t({ "1020000", "65 256000:75 1020000:80", "19000",  "20000", "0", "30000", "99" }));
+        interactive_data_array.emplace(NvCPLHintData::NVCPL_HINT_COUNT,    interactive_data_t({  "420000", "80",                      "80000", "300000", "2", "30000", "99" }));
+#else // No other platforms have interactive tuning data, so disable handling
+        pInfo->no_cpufreq_interactive = true;
+#endif
+    }
 }
 
-void common_power_set_interactive(__attribute__((unused)) struct power_module *module, struct powerhal_info *pInfo, int on)
+void common_power_set_interactive(struct powerhal_info *pInfo, int on)
 {
     int dev_id;
     char path[80];
@@ -593,35 +609,34 @@ void common_power_set_interactive(__attribute__((unused)) struct power_module *m
         return;
 
 #ifdef POWER_MODE_SET_INTERACTIVE
-    int power_mode = -1;
+    NvCPLHintData power_mode = NvCPLHintData::NVCPL_HINT_COUNT;
     if (on) {
         power_mode = get_system_power_mode();
-        if (power_mode < NVCPL_HINT_MAX_PERF || power_mode > NVCPL_HINT_COUNT) {
+        if (power_mode < NvCPLHintData::NVCPL_HINT_MAX_PERF ||
+            power_mode > NvCPLHintData::NVCPL_HINT_COUNT) {
             ALOGV("%s: no system power mode info, take optimized settings", __func__);
-            power_mode = NVCPL_HINT_OPT_PERF;
+            power_mode = NvCPLHintData::NVCPL_HINT_OPT_PERF;
         }
-    } else {
-        power_mode = NVCPL_HINT_COUNT;
     }
     set_interactive_governor(power_mode);
 #endif
 }
 
 #ifdef POWER_MODE_SET_INTERACTIVE
-static int get_system_power_mode(void)
+static NvCPLHintData get_system_power_mode(void)
 {
     char value[PROPERTY_VALUE_MAX] = { 0 };
-    int power_mode = -1;
+    NvCPLHintData power_mode = NvCPLHintData::NVCPL_HINT_COUNT;
 
     property_get("persist.sys.NV_POWER_MODE", value, "");
     if (value[0] != '\0')
     {
-        power_mode = atoi(value);
+        power_mode = static_cast<NvCPLHintData>(atoi(value));
     }
 
     if (get_property_bool("persist.sys.NV_ECO.STATE.ISECO", false))
     {
-        power_mode = NVCPL_HINT_BAT_SAVE;
+        power_mode = NvCPLHintData::NVCPL_HINT_BAT_SAVE;
     }
 
     return power_mode;
@@ -635,7 +650,7 @@ static void __sysfs_write(const char *file, const char *data)
     }
 }
 
-static void set_interactive_governor(int mode)
+static void set_interactive_governor(NvCPLHintData mode)
 {
     __sysfs_write("/sys/devices/system/cpu/cpufreq/interactive/hispeed_freq",
             interactive_data_array[mode].hispeed_freq);
@@ -653,13 +668,13 @@ static void set_interactive_governor(int mode)
             interactive_data_array[mode].go_hispeed_load);
 }
 
-static void set_power_mode_hint(struct powerhal_info *pInfo, nvcpl_hint_t *data)
+static void set_power_mode_hint(struct powerhal_info *pInfo, NvCPLHintData mode)
 {
-    int mode = data[0];
     int status;
     char value[4] = { 0 };
 
-    if (mode < NVCPL_HINT_MAX_PERF || mode > NVCPL_HINT_COUNT)
+    if (mode < NvCPLHintData::NVCPL_HINT_MAX_PERF ||
+        mode > NvCPLHintData::NVCPL_HINT_COUNT)
     {
         ALOGE("%s: invalid hint mode = %d", __func__, mode);
         return;
@@ -680,7 +695,7 @@ static void set_power_mode_hint(struct powerhal_info *pInfo, nvcpl_hint_t *data)
 }
 #endif
 
-static void apply_gpu_boost(struct powerhal_info *pInfo, int hint)
+static void apply_gpu_boost(struct powerhal_info *pInfo, ExtPowerHint hint)
 {
     pInfo->mTimeoutPoker->requestPmQosTimed(PMQOS_CONSTRAINT_GPU_FREQ,
                                             PM_QOS_BOOST_PRIORITY,
@@ -689,7 +704,7 @@ static void apply_gpu_boost(struct powerhal_info *pInfo, int hint)
                                             ms2ns(pInfo->gpu_freq_hints[hint].time_ms));
 }
 
-static void apply_online_cpus_boost(struct powerhal_info *pInfo, int hint)
+static void apply_online_cpus_boost(struct powerhal_info *pInfo, ExtPowerHint hint)
 {
     pInfo->mTimeoutPoker->requestPmQosTimed(PMQOS_CONSTRAINT_ONLINE_CPUS,
                                             PM_QOS_BOOST_PRIORITY,
@@ -698,43 +713,41 @@ static void apply_online_cpus_boost(struct powerhal_info *pInfo, int hint)
                                             ms2ns(pInfo->online_cpu_hints[hint].time_ms));
 }
 
-static void apply_emc_boost(struct powerhal_info *pInfo, int hint)
+static void apply_emc_boost(struct powerhal_info *pInfo, ExtPowerHint hint)
 {
     pInfo->mTimeoutPoker->requestPmQosTimed("/dev/emc_freq_min",
                                             pInfo->emc_freq_hints[hint].min,
                                             ms2ns(pInfo->emc_freq_hints[hint].time_ms));
 }
 
-void common_power_hint(__attribute__((unused)) struct power_module *module, struct powerhal_info *pInfo,
-                            power_hint_t hintId, void *data)
+void common_power_hint(struct powerhal_info *pInfo, ExtPowerHint hint, const void *data)
 {
     uint64_t t;
 
     if (!pInfo)
         return;
 
-    int hint = hintId;
     if (check_hint(pInfo, hint, &t) < 0)
         return;
 
     switch (hint) {
-    case POWER_HINT_VSYNC:
+    case ExtPowerHint::VSYNC:
         if (data)
             set_vsync_min_cpu_freq(pInfo, *(int *)data);
         break;
-    case POWER_HINT_INTERACTION:
+    case ExtPowerHint::INTERACTION:
         break;
-    case POWER_HINT_MULTITHREAD_BOOST:
-    case POWER_HINT_APP_LAUNCH:
-    case POWER_HINT_LAUNCH:
-    case POWER_HINT_SHIELD_STREAMING:
-    case POWER_HINT_HIGH_RES_VIDEO:
-    case POWER_HINT_VIDEO_DECODE:
-    case POWER_HINT_MIRACAST:
-    case POWER_HINT_DISPLAY_ROTATION:
-    case POWER_HINT_AUDIO_SPEAKER:
-    case POWER_HINT_AUDIO_OTHER:
-    case POWER_HINT_AUDIO_LOW_LATENCY:
+    case ExtPowerHint::MULTITHREAD_BOOST:
+    case ExtPowerHint::APP_LAUNCH:
+    case ExtPowerHint::LAUNCH:
+    case ExtPowerHint::SHIELD_STREAMING:
+    case ExtPowerHint::HIGH_RES_VIDEO:
+    case ExtPowerHint::VIDEO_DECODE:
+    case ExtPowerHint::MIRACAST:
+    case ExtPowerHint::DISPLAY_ROTATION:
+    case ExtPowerHint::AUDIO_SPEAKER:
+    case ExtPowerHint::AUDIO_OTHER:
+    case ExtPowerHint::AUDIO_LOW_LATENCY:
         for (auto &cpu_cluster : pInfo->cpu_clusters) {
             pInfo->mTimeoutPoker->requestPmQosTimed(cpu_cluster.pmqos_constraint_path,
                                                 PM_QOS_BOOST_PRIORITY,
@@ -747,44 +760,44 @@ void common_power_hint(__attribute__((unused)) struct power_module *module, stru
         apply_online_cpus_boost(pInfo, hint);
         apply_emc_boost(pInfo, hint);
         break;
-    case POWER_HINT_APP_PROFILE:
+    case ExtPowerHint::APP_PROFILE:
         if (data) {
-            app_profile_set(pInfo, (app_profile_knob*)data);
+            std::map<AppProfileKnob,int> app_profiles;
+            for (int i=0; i<static_cast<int>(AppProfileKnob::APP_PROFILE_COUNT); i++)
+                app_profiles.emplace(static_cast<AppProfileKnob>(i), static_cast<const int*>(data)[i]);
+            app_profile_set(pInfo, app_profiles);
         } else {
-            ALOGW("POWER_HINT_APP_PROFILE: no data, ignore.");
+            ALOGW("APP_PROFILE: no data, ignore.");
         }
         break;
-    case POWER_HINT_CAMERA:
+    case ExtPowerHint::CAMERA:
         ALOGW("Camera hint is not supported in PowerHAL");
         break;
-    case POWER_HINT_POWER_MODE:
+    case ExtPowerHint::POWER_MODE:
 #ifdef POWER_MODE_SET_INTERACTIVE
         if (data) {
             // Set interactive governor parameters according to power mode
-            set_power_mode_hint(pInfo, (nvcpl_hint_t *)data);
+            set_power_mode_hint(pInfo, *((NvCPLHintData*)data));
         } else {
-            ALOGE("POWER_HINT_POWER_MODE: no data, ignore.");
+            ALOGE("POWER_MODE: no data, ignore.");
         }
 #endif
         break;
-    case POWER_HINT_LOW_POWER:
+    case ExtPowerHint::LOW_POWER:
 #ifdef POWER_MODE_SET_INTERACTIVE
-	{
-            nvcpl_hint_t new_state = (data ? NVCPL_HINT_BAT_SAVE : NVCPL_HINT_OPT_PERF);
-            set_power_mode_hint(pInfo, &new_state);
-	}
+         set_power_mode_hint(pInfo, data ? NvCPLHintData::NVCPL_HINT_BAT_SAVE : NvCPLHintData::NVCPL_HINT_OPT_PERF);
 #endif
         break;
 #ifdef USE_NVPHS
-    case POWER_HINT_FRAMEWORKS_UI:
+    case ExtPowerHint::FRAMEWORKS_UI:
         NvPHSSendThroughputHints(*((int*)data), PHS_FLAG_IMMEDIATE, NvUsecase_ui, NvHintType_TransientCpuLoad, INT_MAX, NVPHS_IMMEDIATE_MODE_MIN_HINT_TIMEOUT_MS, NvUsecase_NULL);
         break;
-    case POWER_HINT_CANCEL_PHS_HINT:
+    case ExtPowerHint::CANCEL_PHS_HINT:
         NvPHSCancelThroughputHints(*((int*)data),NvUsecase_ui);
         break;
 #endif
     default:
-        ALOGE("Unknown power hint: 0x%x", hint);
+        ALOGE("Unknown power hint: 0x%x", static_cast<int>(hint));
         break;
     }
 

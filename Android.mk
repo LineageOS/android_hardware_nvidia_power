@@ -1,4 +1,4 @@
-# Copyright (C) 2011 The Android Open Source Project
+# Copyright (C) 2019 The LineageOS Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,59 +12,55 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Changes made relating to Tegra Processor platforms by NVIDIA CORPORATION are subject
-# to the following terms and conditions:
-#
-# Copyright (c) 2012-2017 NVIDIA CORPORATION.  All Rights Reserved.
-#
-# NVIDIA CORPORATION and its licensors retain all intellectual property
-# and proprietary rights in and to this software, related documentation
-# and any modifications thereto.  Any use, reproduction, disclosure or
-# distribution of this software and related documentation without an express
-# license agreement from NVIDIA CORPORATION is strictly prohibited.
+ifeq ($(TARGET_POWERHAL_VARIANT),tegra)
 
 LOCAL_PATH := $(call my-dir)
 
-ifeq (,$(filter-out tegra%,$(TARGET_BOARD_PLATFORM)))
-include $(NVIDIA_DEFAULTS)
+include $(CLEAR_VARS)
+LOCAL_MODULE := vendor.nvidia.hardware.power@1.0-service
+LOCAL_INIT_RC := vendor.nvidia.hardware.power@1.0-service.rc
 
-LOCAL_MODULE := libpowerhal
+LOCAL_SHARED_LIBRARIES := \
+    libhardware \
+    libhidlbase \
+    libhidltransport \
+    liblog \
+    libcutils \
+    libutils \
+    libdl \
+    libexpat \
+    vendor.nvidia.hardware.power@1.0
+
+LOCAL_SRC_FILES := \
+    service.cpp \
+    Power.cpp \
+    nvpowerhal.cpp \
+    timeoutpoker.cpp \
+    powerhal_parser.cpp \
+    powerhal_utils.cpp \
+    tegra_sata_hal.cpp
+
+ifeq ($(TARGET_TEGRA_VERSION),t210)
+    LOCAL_SRC_FILES += power_floor_t210.cpp
+endif
 
 ifeq ($(TARGET_TEGRA_VERSION), $(filter $(TARGET_TEGRA_VERSION), ap20 t30 t114 t148))
     LOCAL_CFLAGS += -DGPU_IS_LEGACY
 endif
 
-ifeq ($(TARGET_TEGRA_VERSION), t124)
-    LOCAL_CFLAGS += -DPOWER_MODE_SET_INTERACTIVE
-    LOCAL_SRC_FILES += t124_interactive.cpp
-endif
+# T124+ uses set interactive. Revist if <= T114 is brought back
+LOCAL_CFLAGS += -DPOWER_MODE_SET_INTERACTIVE
+LOCAL_CFLAGS += -DTARGET_TEGRA_VERSION=$(TARGET_TEGRA_VERSION:t=)
 
-ifeq ($(TARGET_TEGRA_VERSION), t210)
-    LOCAL_CFLAGS += -DPOWER_MODE_SET_INTERACTIVE
-    LOCAL_SRC_FILES += t210_interactive.cpp
-endif
-
-ifeq ($(PLATFORM_IS_AFTER_N),1)
+ifeq ($(TARGET_TEGRA_PHS),nvphs)
     LOCAL_CFLAGS += -DUSE_NVPHS
+    LOCAL_SHARED_LIBRARIES += libnvphs
 endif
 
-ifeq ($(BOARD_USES_POWERHAL),true)
-    ifeq ($(PLATFORM_IS_AFTER_N),1)
-        LOCAL_SRC_FILES += nvpowerhal.cpp timeoutpoker.cpp powerhal_parser.cpp
-        LOCAL_SHARED_LIBRARIES += libexpat libcutils
-    else
-        ifeq ($(NV_ANDROID_FRAMEWORK_ENHANCEMENTS),TRUE)
-            LOCAL_SRC_FILES += nvpowerhal.cpp timeoutpoker.cpp powerhal_parser.cpp
-            LOCAL_SHARED_LIBRARIES += libexpat
-        else
-            LOCAL_SRC_FILES += powerhal_stub.cpp
-        endif
-    endif
-else
-    LOCAL_SRC_FILES += powerhal_stub.cpp
-endif
+LOCAL_MODULE_RELATIVE_PATH := hw
+LOCAL_MODULE_TAGS := optional
+LOCAL_VENDOR_MODULE := true
+LOCAL_MODULE_OWNER := nvidia
+include $(BUILD_EXECUTABLE)
 
-LOCAL_SRC_FILES += powerhal_utils.cpp
-
-include $(NVIDIA_STATIC_LIBRARY)
-endif
+endif # TARGET_POWERHAL_VARIANT == tegra
