@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
  * Copyright (c) 2012-2017, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (C) 2019 The LineageOS Project
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -27,8 +28,6 @@
 
 #ifdef PLATFORM_IS_AFTER_N
 #include <phs.h>
-#define ATRACE_TAG ATRACE_TAG_GRAPHICS
-#include <cutils/trace.h>
 #endif
 
 #ifdef POWER_MODE_SET_INTERACTIVE
@@ -772,14 +771,10 @@ void common_power_hint(struct power_module *module, struct powerhal_info *pInfo,
         break;
 #ifdef PLATFORM_IS_AFTER_N
     case POWER_HINT_FRAMEWORKS_UI:
-        ATRACE_BEGIN("powerhal passing on hints to PHS");
         NvPHSSendThroughputHints(*((int*)data), PHS_FLAG_IMMEDIATE, NvUsecase_ui, NvHintType_TransientCpuLoad, INT_MAX, NVPHS_IMMEDIATE_MODE_MIN_HINT_TIMEOUT_MS, NvUsecase_NULL);
-        ATRACE_END();
         break;
     case POWER_HINT_CANCEL_PHS_HINT:
-        ATRACE_BEGIN("powerhal passing on hints to PHS");
         NvPHSCancelThroughputHints(*((int*)data),NvUsecase_ui);
-        ATRACE_END();
         break;
 #endif
     default:
