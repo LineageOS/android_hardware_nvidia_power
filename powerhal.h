@@ -28,6 +28,11 @@
 
 #include <vector>
 
+#include <vendor/nvidia/hardware/power/1.0/IPower.h>
+
+using ::vendor::nvidia::hardware::power::V1_0::ExtPowerHint;
+using ::vendor::nvidia::hardware::power::V1_0::NvCPLHintData;
+
 #define MAX_CHARS 32
 
 #define POWER_CAP_PROP "persist.sys.NV_PBC_PWR_LIMIT"
@@ -47,89 +52,7 @@
 
 #define HARDWARE_TYPE_PROP "ro.hardware"
 
-#define NV_POWER_HINT_START POWER_HINT_VSYNC
-
-/*
- * Power hint identifiers passed to (*powerHint)
- */
-typedef enum {
-    NV_POWER_HINT_VSYNC                 = POWER_HINT_VSYNC,
-    NV_POWER_HINT_INTERACTION           = POWER_HINT_INTERACTION,
-    /* DO NOT USE POWER_HINT_VIDEO_ENCODE/_DECODE!  They will be removed in
-     * KLP.
-     */
-    NV_POWER_HINT_VIDEO_ENCODE          = POWER_HINT_VIDEO_ENCODE,
-    NV_POWER_HINT_VIDEO_DECODE          = POWER_HINT_VIDEO_DECODE,
-    NV_POWER_HINT_LOW_POWER             = POWER_HINT_LOW_POWER,
-    NV_POWER_HINT_SUSTAINED_PERFORMANCE = POWER_HINT_SUSTAINED_PERFORMANCE,
-    NV_POWER_HINT_VR_MODE               = POWER_HINT_VR_MODE,
-    NV_POWER_HINT_LAUNCH                = POWER_HINT_LAUNCH,
-
-    /* NVIDIA added hints start from here */
-    POWER_HINT_APP_PROFILE           = 0x00000009,
-    POWER_HINT_APP_LAUNCH            = 0x0000000A,
-    POWER_HINT_SHIELD_STREAMING      = 0x0000000B,
-    POWER_HINT_HIGH_RES_VIDEO        = 0x0000000C,
-    POWER_HINT_POWER_MODE            = 0x0000000D,
-    POWER_HINT_MIRACAST              = 0x0000000E,
-    POWER_HINT_DISPLAY_ROTATION      = 0x0000000F,
-    POWER_HINT_CAMERA                = 0x00000010,
-    POWER_HINT_MULTITHREAD_BOOST     = 0x00000011,
-    POWER_HINT_AUDIO_SPEAKER         = 0x00000012,
-    POWER_HINT_AUDIO_OTHER           = 0X00000013,
-    POWER_HINT_AUDIO_LOW_LATENCY     = 0x00000014,
-    POWER_HINT_CANCEL_PHS_HINT       = 0x00000015,
-    POWER_HINT_FRAMEWORKS_UI         = 0x00000016,
-
-    POWER_HINT_COUNT
-} nv_power_hint_t;
-
-/*
- * App profile knobs, passed as data with POWER_HINT_APP_PROFILE hint
- */
-
-typedef enum {
-    APP_PROFILE_CPU_SCALING_MIN_FREQ,
-    APP_PROFILE_CPU_CORE_BIAS,
-    APP_PROFILE_CPU_MAX_NORMAL_FREQ_IN_PERCENTAGE,
-    APP_PROFILE_CPU_MAX_CORE,
-    APP_PROFILE_GPU_CBUS_CAP_LEVEL,
-    APP_PROFILE_GPU_SCALING,
-    APP_PROFILE_EDP_MODE,
-    APP_PROFILE_PBC_POWER,
-    APP_PROFILE_FAN_CAP,
-    APP_PROFILE_VOLT_TEMP_MODE,
-    APP_PROFILE_PRISM_CONTROL_ENABLE,
-    APP_PROFILE_CPU_MIN_CORE,
-    APP_PROFILE_COUNT,
-} app_profile_knob;
-
-/*
- * Camera power hint enum, passed as data with POWER_HINT_CAMERA hint
- */
-
-typedef enum {
-    CAMERA_HINT_STILL_PREVIEW_POWER,
-    CAMERA_HINT_VIDEO_PREVIEW_POWER,
-    CAMERA_HINT_VIDEO_RECORD_POWER,
-    CAMERA_HINT_PERF,
-    CAMERA_HINT_FPS,
-    CAMERA_HINT_RESET,
-    CAMERA_HINT_COUNT,
-    CAMERA_HINT_HIGH_FPS_VIDEO_RECORD_POWER,
-} camera_hint_t;
-
-/*
- * NvCPL Power Mode power hint enum, passed as data with POWER_HINT_POWER_MODE
- * hint
- */
-typedef enum {
-    NVCPL_HINT_MAX_PERF,
-    NVCPL_HINT_OPT_PERF,
-    NVCPL_HINT_BAT_SAVE,
-    NVCPL_HINT_USR_CUST,
-    NVCPL_HINT_COUNT,
-} nvcpl_hint_t;
+#define POWER_HINT_MAX ExtPowerHint::FRAMERATE_DATA
 
 struct input_dev_map {
     int dev_id;
@@ -161,7 +84,7 @@ typedef struct cpu_cluster_data {
     int fd_app_max_freq;
     int fd_vsync_min_freq;
 
-    power_hint_data_t hints[POWER_HINT_COUNT];
+    std::map<ExtPowerHint,power_hint_data_t> hints;
 } cpu_cluster_data_t;
 
 struct powerhal_info {
@@ -177,12 +100,12 @@ struct powerhal_info {
     std::vector<struct input_dev_map> input_devs;
 
     /* Time last hint was sent - in usec */
-    uint64_t hint_time[POWER_HINT_COUNT];
-    uint64_t hint_interval[POWER_HINT_COUNT];
+    std::map<ExtPowerHint,uint64_t> hint_time;
+    std::map<ExtPowerHint,uint64_t> hint_interval;
 
-    power_hint_data_t gpu_freq_hints[POWER_HINT_COUNT];
-    power_hint_data_t emc_freq_hints[POWER_HINT_COUNT];
-    power_hint_data_t online_cpu_hints[POWER_HINT_COUNT];
+    std::map<ExtPowerHint,power_hint_data_t> gpu_freq_hints;
+    std::map<ExtPowerHint,power_hint_data_t> emc_freq_hints;
+    std::map<ExtPowerHint,power_hint_data_t> online_cpu_hints;
 
     int boot_boost_time_ms;
 
@@ -219,7 +142,7 @@ void common_power_open(struct powerhal_info *pInfo);
 /* Power management setup action at startup.
  * Such as to set default cpufreq parameters.
  */
-void common_power_init(__attribute__((unused)) struct power_module *module, struct powerhal_info *pInfo);
+void common_power_init(struct powerhal_info *pInfo);
 
 /* Power management action,
  * upon the system entering interactive state and ready for interaction,
@@ -227,14 +150,13 @@ void common_power_init(__attribute__((unused)) struct power_module *module, stru
  * OR
  * non-interactive state the system appears asleep, displayi/touch usually turned off.
 */
-void common_power_set_interactive(__attribute__((unused)) struct power_module *module,
-                                    struct powerhal_info *pInfo, int on);
+void common_power_set_interactive(struct powerhal_info *pInfo, int on);
 
 /* PowerHint called to pass hints on power requirements, which
  * may result in adjustment of power/performance parameters of the
  * cpufreq governor and other controls.
 */
-void common_power_hint(__attribute__((unused)) struct power_module *module, struct powerhal_info *pInfo,
-                            power_hint_t hint, void *data);
+void common_power_hint(struct powerhal_info *pInfo, ExtPowerHint hint, const void *data);
 
+void set_power_level_floor(int on);
 #endif  //COMMON_POWER_HAL_H
