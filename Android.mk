@@ -38,6 +38,10 @@ ifeq ($(TARGET_TEGRA_VERSION), t210)
     LOCAL_CFLAGS += -DPOWER_MODE_SET_INTERACTIVE
 endif
 
+ifeq ($(PLATFORM_IS_AFTER_N),1)
+    LOCAL_CFLAGS += -DUSE_NVPHS
+endif
+
 ifeq ($(BOARD_USES_POWERHAL),true)
     ifeq ($(PLATFORM_IS_AFTER_N),1)
         LOCAL_SRC_FILES += nvpowerhal.cpp timeoutpoker.cpp powerhal_parser.cpp

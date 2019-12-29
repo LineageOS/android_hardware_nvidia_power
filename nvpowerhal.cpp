@@ -24,8 +24,8 @@
 #include "powerhal_utils.h"
 #include "powerhal.h"
 
-#ifdef PLATFORM_IS_AFTER_N
-#include <phs.h>
+#ifdef USE_NVPHS
+#include "phs.h"
 #endif
 
 #ifdef POWER_MODE_SET_INTERACTIVE
@@ -759,7 +759,7 @@ void common_power_hint(__attribute__((unused)) struct power_module *module, stru
         }
 #endif
         break;
-#ifdef PLATFORM_IS_AFTER_N
+#ifdef USE_NVPHS
     case POWER_HINT_FRAMEWORKS_UI:
         NvPHSSendThroughputHints(*((int*)data), PHS_FLAG_IMMEDIATE, NvUsecase_ui, NvHintType_TransientCpuLoad, INT_MAX, NVPHS_IMMEDIATE_MODE_MIN_HINT_TIMEOUT_MS, NvUsecase_NULL);
         break;
