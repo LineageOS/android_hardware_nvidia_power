@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
  * Copyright (c) 2012-2017, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (C) 2019 The LineageOS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,7 +49,6 @@
 
 #define NV_POWER_HINT_START POWER_HINT_VSYNC
 
-#ifdef PLATFORM_IS_AFTER_N
 /*
  * Power hint identifiers passed to (*powerHint)
  */
@@ -130,7 +130,6 @@ typedef enum {
     NVCPL_HINT_USR_CUST,
     NVCPL_HINT_COUNT,
 } nvcpl_hint_t;
-#endif
 
 struct input_dev_map {
     int dev_id;
@@ -220,7 +219,7 @@ void common_power_open(struct powerhal_info *pInfo);
 /* Power management setup action at startup.
  * Such as to set default cpufreq parameters.
  */
-void common_power_init(struct power_module *module, struct powerhal_info *pInfo);
+void common_power_init(__attribute__((unused)) struct power_module *module, struct powerhal_info *pInfo);
 
 /* Power management action,
  * upon the system entering interactive state and ready for interaction,
@@ -228,14 +227,14 @@ void common_power_init(struct power_module *module, struct powerhal_info *pInfo)
  * OR
  * non-interactive state the system appears asleep, displayi/touch usually turned off.
 */
-void common_power_set_interactive(struct power_module *module,
+void common_power_set_interactive(__attribute__((unused)) struct power_module *module,
                                     struct powerhal_info *pInfo, int on);
 
 /* PowerHint called to pass hints on power requirements, which
  * may result in adjustment of power/performance parameters of the
  * cpufreq governor and other controls.
 */
-void common_power_hint(struct power_module *module, struct powerhal_info *pInfo,
+void common_power_hint(__attribute__((unused)) struct power_module *module, struct powerhal_info *pInfo,
                             power_hint_t hint, void *data);
 
 #endif  //COMMON_POWER_HAL_H

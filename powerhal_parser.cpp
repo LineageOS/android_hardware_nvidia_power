@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016-2017, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (C) 2019 The LineageOS Project
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -122,8 +123,8 @@ const std::map<std::string, int> power_hint_ids = {
 class XmlElement {
     public:
         virtual ~XmlElement() {};
-        virtual void parse(struct powerhal_info *pInfo, const char **attrs) {}
-        virtual void finish(struct powerhal_info *pInfo) {}
+        virtual void parse(__attribute__((unused)) struct powerhal_info *pInfo, __attribute__((unused)) const char **attrs) {}
+        virtual void finish(__attribute__((unused)) struct powerhal_info *pInfo) {}
 
         const std::string& name() const { return m_name; }
         XmlElement *parent() const { return m_parent; }
@@ -192,7 +193,7 @@ class XmlElementCpuCluster : public XmlElement {
                         std::map<std::string, XmlElement*> children) :
                 XmlElement(parent, children, "cpu_cluster") {}
 
-        virtual void parse(struct powerhal_info *pInfo, const char **attrs) {
+        virtual void parse(struct powerhal_info *pInfo, __attribute__((unused)) const char **attrs) {
             pInfo->cpu_clusters.push_back({});
         }
 };
@@ -252,7 +253,7 @@ class XmlElementHint : public XmlElement {
                         std::map<std::string, XmlElement*> children) :
                 XmlElement(parent, children, "hint") {}
 
-        virtual void parse(struct powerhal_info *pInfo, const char **attrs) {
+        virtual void parse(__attribute__((unused)) struct powerhal_info *pInfo, const char **attrs) {
             m_hintId = -1;
             for (; *attrs; attrs += 2) {
                 if (strcmp(attrs[0], "name")) {
@@ -268,7 +269,7 @@ class XmlElementHint : public XmlElement {
             }
         }
 
-        virtual void finish(struct powerhal_info *pInfo) {
+        virtual void finish(__attribute__((unused)) struct powerhal_info *pInfo) {
             m_hintId = -1;
         }
 
@@ -571,7 +572,7 @@ static void elementStart(void* data_, const char* _name, const char **attrs)
     data->elements.push(std::move(name));
 }
 
-static void elementEnd(void* data_, const char* name)
+static void elementEnd(void* data_, __attribute__((unused)) const char* name)
 {
     auto data = static_cast<Data*>(data_);
 
@@ -585,7 +586,6 @@ static void elementEnd(void* data_, const char* name)
 int parse_xml(struct powerhal_info *pInfo, const char *hw_name)
 {
     char buf[MAX_LINE_SIZE];
-    FILE *fp;
     int ret = 0;
     struct Data data;
     XML_Parser parser;

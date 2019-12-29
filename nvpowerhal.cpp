@@ -24,8 +24,6 @@
 #include "powerhal_utils.h"
 #include "powerhal.h"
 
-#include "nvos.h"
-
 #ifdef PLATFORM_IS_AFTER_N
 #include <phs.h>
 #endif
@@ -50,7 +48,6 @@ static const interactive_data_t interactive_data_array[NVCPL_HINT_COUNT+1] =
 static void find_input_device_ids(struct powerhal_info *pInfo)
 {
     int i = 0;
-    int status;
     size_t count = 0;
     char path[80];
     char name[MAX_CHARS];
@@ -378,15 +375,6 @@ static void set_app_profile_max_cpu_freq_cluster(struct powerhal_info *pInfo, in
     ALOGV("%s: set max CPU ceiling =%d", __func__, value);
 }
 
-static void set_app_profile_max_cpu_freq(struct powerhal_info *pInfo, int value)
-{
-    if (value <= 0)
-        value = pInfo->defaults.max_freq;
-
-    for (auto &cpu_cluster : pInfo->cpu_clusters)
-        set_app_profile_max_cpu_freq_cluster(pInfo, value, &cpu_cluster);
-}
-
 static void set_app_profile_max_cpu_freq_percent(struct powerhal_info *pInfo, int percent)
 {
     int targetMaxFreq;
@@ -449,7 +437,7 @@ static void set_app_profile_min_gpu_freq(struct powerhal_info *pInfo, int value)
         pInfo->mTimeoutPoker->requestPmQos(PMQOS_CONSTRAINT_GPU_FREQ, PM_QOS_APP_PROFILE_PRIORITY, PM_QOS_DEFAULT_VALUE, value);
 }
 
-static void set_prism_control_enable(struct powerhal_info *pInfo, int value)
+static void set_prism_control_enable(__attribute__((unused)) struct powerhal_info *pInfo, int value)
 {
     if (value)
         set_property_int(PRISM_CONTROL_PROP, 1);
@@ -526,16 +514,20 @@ static void app_profile_set(struct powerhal_info *pInfo, app_profile_knob *data)
             case APP_PROFILE_CPU_MIN_CORE:
                 set_app_profile_min_online_cpus(pInfo, data[i]);
                 break;
+            case APP_PROFILE_FAN_CAP:
+                set_fan_cap(pInfo, data[i]);
+                break;
+            case APP_PROFILE_PBC_POWER:
+                set_pbc_power(pInfo, data[i]);
+                break;
             default:
                 break;
         }
     }
 }
 
-void common_power_init(struct power_module *module, struct powerhal_info *pInfo)
+void common_power_init(__attribute__((unused)) struct power_module *module, struct powerhal_info *pInfo)
 {
-    size_t i;
-
     if (!pInfo)
         return;
 
@@ -553,13 +545,11 @@ void common_power_init(struct power_module *module, struct powerhal_info *pInfo)
     pInfo->switch_cpu_emc_limit_enabled = sysfs_exists(CPU_EMC_RATIO_SRC_NODE);
 }
 
-void common_power_set_interactive(struct power_module *module, struct powerhal_info *pInfo, int on)
+void common_power_set_interactive(__attribute__((unused)) struct power_module *module, struct powerhal_info *pInfo, int on)
 {
-    int i;
     int dev_id;
     char path[80];
     const char* state = (0 == on)?"0":"1";
-    int power_mode = -1;
 
     if (!pInfo)
         return;
@@ -590,6 +580,7 @@ void common_power_set_interactive(struct power_module *module, struct powerhal_i
         return;
 
 #ifdef POWER_MODE_SET_INTERACTIVE
+    int power_mode = -1;
     if (on) {
         power_mode = get_system_power_mode();
         if (power_mode < NVCPL_HINT_MAX_PERF || power_mode > NVCPL_HINT_COUNT) {
@@ -707,11 +698,10 @@ static void apply_emc_boost(struct powerhal_info *pInfo, int hint)
                                             ms2ns(pInfo->emc_freq_hints[hint].time_ms));
 }
 
-void common_power_hint(struct power_module *module, struct powerhal_info *pInfo,
+void common_power_hint(__attribute__((unused)) struct power_module *module, struct powerhal_info *pInfo,
                             power_hint_t hintId, void *data)
 {
     uint64_t t;
-    size_t i;
 
     if (!pInfo)
         return;

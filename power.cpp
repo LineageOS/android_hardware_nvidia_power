@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
  * Copyright (c) 2014-2017, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (C) 2019 The LineageOS Project
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -79,7 +80,7 @@ static bool wait_for_gpu_sysfs()
     return true;
 }
 
-static bool wait_for_gpu_ready(bool on)
+static bool wait_for_gpu_ready(__attribute__ ((unused)) bool on)
 {
     char buf[4];
 

@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
  * Copyright (c) 2013-2017, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (C) 2019 The LineageOS Project
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -16,6 +17,8 @@
 #define LOG_TAG "powerHAL::common"
 
 #include "powerhal_utils.h"
+#include <stdio.h>
+#include <unistd.h>
 
 void sysfs_write(const char *path, const char *s)
 {

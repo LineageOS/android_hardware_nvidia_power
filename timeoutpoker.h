@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2011-2013 NVIDIA Corporation.  All Rights Reserved.
+ * Copyright (C) 2019 The LineageOS Project
  *
  * NVIDIA Corporation and its licensors retain all intellectual property and
  * proprietary rights in and to this software and related documentation.  Any
@@ -32,8 +33,6 @@
 //run an event after a timeout on the IPC threads
 
 using namespace android;
-
-static int createConstraintCommand(char* command, int size, int priority, int max, int min);
 
 class TimeoutPoker {
 private:
@@ -201,7 +200,7 @@ private:
         KeyedVector<unsigned int, QueuedEvent*> mQueuedEvents;
 
         virtual void handleMessage(const Message& msg);
-        PokeHandler(TimeoutPoker* poker, Barrier* readyToRun);
+        PokeHandler(Barrier* readyToRun);
         int generateNewKey(void);
         void sendEventDelayed(nsecs_t delay, QueuedEvent* ev);
         int listenForHandleToCloseFd(int handle, int fd);
@@ -218,10 +217,8 @@ private:
         int openPmQosNode(const char* filename, int prioirity, int max, int min);
 
     private:
-        TimeoutPoker* mPoker;
         int mKey;
 
-        bool mSpamRefresh;
         mutable Mutex mEvLock;
     };
 

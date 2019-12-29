@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2011-2016 NVIDIA Corporation.  All Rights Reserved.
+ * Copyright (C) 2019 The LineageOS Project
  *
  * NVIDIA Corporation and its licensors retain all intellectual property and
  * proprietary rights in and to this software and related documentation.  Any
@@ -18,9 +19,14 @@ enum {
     SERVER_FD
 };
 
+static int createConstraintCommand(char* command, int size, int priority, int max, int min) {
+    snprintf(command, size, "%d %d %d 0", max, min, priority);
+    return strlen(command);
+}
+
 TimeoutPoker::TimeoutPoker(Barrier* readyToRun)
 {
-    mPokeHandler = new PokeHandler(this, readyToRun);
+    mPokeHandler = new PokeHandler(readyToRun);
 }
 
 //Called usually from IPC thread
@@ -192,10 +198,8 @@ int TimeoutPoker::PokeHandler::generateNewKey(void)
     return mKey++;
 }
 
-TimeoutPoker::PokeHandler::PokeHandler(TimeoutPoker* poker, Barrier* readyToRun) :
-    mPoker(poker),
-    mKey(0),
-    mSpamRefresh(false)
+TimeoutPoker::PokeHandler::PokeHandler(Barrier* readyToRun) :
+    mKey(0)
 {
     mWorker = new LooperThread(readyToRun);
     mWorker->run("TimeoutPoker::PokeHandler::LooperThread", PRIORITY_FOREGROUND);
@@ -293,9 +297,4 @@ int TimeoutPoker::PokeHandler::listenForHandleToCloseFd(int handle, int fd)
     return !mWorker->mLooper->addFd(handle, ALOOPER_POLL_CALLBACK,
             ALOOPER_EVENT_ERROR | ALOOPER_EVENT_HANGUP,
             pipeCloseCb, new CallbackContext(mWorker->mLooper, fd));
-}
-
-int createConstraintCommand(char* command, int size, int priority, int max, int min) {
-    snprintf(command, size, "%d %d %d 0", max, min, priority);
-    return strlen(command);
 }
