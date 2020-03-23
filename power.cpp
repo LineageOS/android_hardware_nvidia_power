@@ -48,7 +48,7 @@
 #define GPU_ELCG_NODE "/sys/devices/gpu.0/elcg_enable"
 #define GPU_ELPG_NODE "/sys/devices/gpu.0/elpg_enable"
 #define GPU_SLCG_NODE "/sys/devices/gpu.0/slcg_enable"
-#define SOC_DISABLE_DVFS_NODE "/sys/module/tegra21_dvfs/parameters/disable_core"
+#define SOC_DISABLE_DVFS_NODE "/sys/module/tegra210_dvfs/parameters/disable_core"
 #define WIFI_PM_NODE "/sys/class/net/wlan0/device/rf_test/pm"
 #define WIFI_PM_ENABLE "pm_enable"
 #define WIFI_PM_DISABLE "pm_disable"
