@@ -24,7 +24,7 @@
 
 #define FOSTER_E_HDD    "/dev/block/sda"
 #define HDD_STANDBY_TIMEOUT     60
-#define BRICK_STATE_PROP "persist.power.brick"
+#define BRICK_STATE_PROP "persist.vendor.power.brick"
 #define CPU_CC_STATE_NODE "/sys/kernel/debug/cpuidle_t210/fast_cluster_states_enable"
 #define CPU_CC_IDLE 0x1
 #define CPU_CC_ON 0xcf
@@ -178,7 +178,8 @@ static void set_power_level_floor(int on)
     property_get("ro.hardware", platform, "");
     property_get(BRICK_STATE_PROP, brick, "");
 
-    if (strncmp(platform, "darcy", 5))
+    if (strncmp(platform, "darcy", 5) &&
+        strncmp(platform, "sif", 3))
         return;
 
     if (is_brick_whitelisted(brick)) {
