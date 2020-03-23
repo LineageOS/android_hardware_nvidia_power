@@ -40,15 +40,14 @@
 #define GPU_FLOOR_ON 768000000
 #define GPU_FLOOR_IDLE 844800000
 #define GPU_FLOOR_WHITELIST 384000000
-#define GPU_MIN_FREQ "/sys/devices/platform/host1x/gpu.0/devfreq/gpu.0/min_freq"
-#define GPU_PMU_STATE "/sys/devices/platform/gpu.0/pmu_state"
-#define GPU_RAIL_GATE_NODE "/sys/devices/platform/host1x/gpu.0/railgate_enable"
+#define GPU_MIN_FREQ "/sys/devices/gpu.0/devfreq/57000000.gpu/min_freq"
+#define GPU_RAIL_GATE_NODE "/sys/devices/gpu.0/railgate_enable"
 #define GPU_STATE "/dev/nvhost-gpu"
-#define GPU_AELPG_NODE "/sys/devices/platform/gpu.0/aelpg_enable"
-#define GPU_BLCG_NODE "/sys/devices/platform/gpu.0/blcg_enable"
-#define GPU_ELCG_NODE "/sys/devices/platform/gpu.0/elcg_enable"
-#define GPU_ELPG_NODE "/sys/devices/platform/gpu.0/elpg_enable"
-#define GPU_SLCG_NODE "/sys/devices/platform/gpu.0/slcg_enable"
+#define GPU_AELPG_NODE "/sys/devices/gpu.0/aelpg_enable"
+#define GPU_BLCG_NODE "/sys/devices/gpu.0/blcg_enable"
+#define GPU_ELCG_NODE "/sys/devices/gpu.0/elcg_enable"
+#define GPU_ELPG_NODE "/sys/devices/gpu.0/elpg_enable"
+#define GPU_SLCG_NODE "/sys/devices/gpu.0/slcg_enable"
 #define SOC_DISABLE_DVFS_NODE "/sys/module/tegra21_dvfs/parameters/disable_core"
 #define WIFI_PM_NODE "/sys/class/net/wlan0/device/rf_test/pm"
 #define WIFI_PM_ENABLE "pm_enable"
@@ -80,25 +79,6 @@ static bool wait_for_gpu_sysfs()
     return true;
 }
 
-static bool wait_for_gpu_ready(__attribute__ ((unused)) bool on)
-{
-    char buf[4];
-
-    if (!wait_for_gpu_sysfs())
-        return false;
-
-    for (int cnt = 0; cnt < GPU_DELAY_MAX; ++cnt) {
-        sleep(1);
-        memset(buf, 0, sizeof(buf));
-        sysfs_read(GPU_PMU_STATE, buf, sizeof(buf));
-
-        if (atol(buf))
-            return true;
-    }
-
-    return false;
-}
-
 static void* set_gpu_power_knobs_off(void*)
 {
     if (!wait_for_gpu_sysfs()) {
@@ -108,12 +88,6 @@ static void* set_gpu_power_knobs_off(void*)
 
     sysfs_write_int(GPU_RAIL_GATE_NODE, 0);
 
-    if (!wait_for_gpu_ready(false)) {
-        ALOGE("PowerHal: GPU is not ready, skipping power policy");
-        return NULL;
-    }
-
-    sleep(1);
     sysfs_write_int(GPU_ELPG_NODE, 0);
     sysfs_write_int(GPU_SLCG_NODE, 0);
     sysfs_write_int(GPU_BLCG_NODE, 0);
@@ -126,12 +100,6 @@ static void* set_gpu_power_knobs_off(void*)
 
 static void* set_gpu_power_knobs_on(void*)
 {
-    if (!wait_for_gpu_ready(true)) {
-        ALOGE("PowerHal: GPU is not ready, skipping power policy");
-        return NULL;
-    }
-
-    sleep(1);
     sysfs_write_int(GPU_ELCG_NODE, 1);
     sysfs_write_int(GPU_BLCG_NODE, 1);
     sysfs_write_int(GPU_SLCG_NODE, 1);
