@@ -19,6 +19,7 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 LOCAL_MODULE := vendor.nvidia.hardware.power@1.0-service
 LOCAL_INIT_RC := vendor.nvidia.hardware.power@1.0-service.rc
+LOCAL_VINTF_FRAGMENTS := vendor.nvidia.hardware.power@1.0-service.xml
 
 LOCAL_SHARED_LIBRARIES := \
     libhardware \
@@ -57,6 +58,7 @@ ifeq ($(TARGET_TEGRA_PHS),nvphs)
 endif
 
 ifeq ($(TARGET_TEGRA_POWER),lineage)
+    LOCAL_VINTF_FRAGMENTS += vendor.nvidia.hardware.power@1.0-service.lineage.xml
     LOCAL_CFLAGS += -DLINEAGE_PROFILES
     LOCAL_SHARED_LIBRARIES += \
         vendor.lineage.power@1.0
