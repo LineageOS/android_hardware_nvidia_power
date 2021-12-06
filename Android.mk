@@ -57,13 +57,6 @@ ifeq ($(TARGET_TEGRA_PHS),nvphs)
     LOCAL_SHARED_LIBRARIES += libnvphs
 endif
 
-ifeq ($(TARGET_TEGRA_POWER),lineage)
-    LOCAL_VINTF_FRAGMENTS += vendor.nvidia.hardware.power@1.0-service.lineage.xml
-    LOCAL_CFLAGS += -DLINEAGE_PROFILES
-    LOCAL_SHARED_LIBRARIES += \
-        vendor.lineage.power@1.0
-endif
-
 LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_MODULE_TAGS := optional
 LOCAL_VENDOR_MODULE := true

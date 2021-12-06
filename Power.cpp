@@ -92,27 +92,7 @@ Return<void> Power::setInteractive(bool interactive)  {
 }
 
 Return<void> Power::powerHint(PowerHint hint, int32_t data) {
-    ExtPowerHint ext_hint;
-
-#ifdef LINEAGE_PROFILES
-    if (static_cast<int>(hint) > 100) {
-        switch (static_cast<LineagePowerHint>(hint)) {
-        case LineagePowerHint::CPU_BOOST:
-            ext_hint = ExtPowerHint::MULTITHREAD_BOOST;
-            break;
-        case LineagePowerHint::SET_PROFILE:
-            ext_hint = ExtPowerHint::POWER_MODE;
-            break;
-        default:
-            break;
-	}
-    } else
-#endif
-    {
-        ext_hint = static_cast<ExtPowerHint>(hint);
-    }
-
-    common_power_hint(pInfo, ext_hint, &data);
+    common_power_hint(pInfo, static_cast<ExtPowerHint>(hint), &data);
     return Void();
 }
 
@@ -136,20 +116,6 @@ Return<void> Power::getPlatformLowPowerStats(getPlatformLowPowerStats_cb _hidl_c
     return Void();
 }
 
-#ifdef LINEAGE_PROFILES
-Return<int32_t> Power::getFeature(LineageFeature feature)  {
-    switch (feature) {
-    case LineageFeature::SUPPORTED_PROFILES:
-        return !pInfo->no_cpufreq_interactive ? static_cast<int>(NvCPLHintData::NVCPL_HINT_COUNT)-1 : -1;
-        break;
-    default:
-        ALOGW("Error getting the feature, it doesn't exist %d\n", feature);
-        return -1;
-        break;
-    }
-}
-#endif
-
 status_t Power::registerAsSystemService() {
     status_t ret = 0;
 
@@ -160,16 +126,6 @@ status_t Power::registerAsSystemService() {
     } else {
         ALOGI("Successfully registered IPower");
     }
-
-#ifdef LINEAGE_PROFILES
-    ret = ILineagePower::registerAsService();
-    if (ret != 0) {
-        ALOGE("Failed to register ILineagePower (%d)", ret);
-        goto fail;
-    } else {
-        ALOGI("Successfully registered ILineagePower");
-    }
-#endif
 
 fail:
     return ret;
