@@ -16,6 +16,7 @@
 
 #include <utils/threads.h>
 #include <utils/Errors.h>
+#include <utils/KeyedVector.h>
 #include <utils/List.h>
 #include <utils/Looper.h>
 #include <utils/Log.h>
