@@ -458,21 +458,6 @@ class XmlElementCpufreqInteractive : public XmlElement {
         }
 };
 
-class XmlElementSclkBoost : public XmlElement {
-    public:
-        XmlElementSclkBoost(XmlElement *parent,
-                        std::map<std::string, XmlElement*> children) :
-                XmlElement(parent, children, "sclk_boost") {}
-
-        virtual void parse(struct powerhal_info *pInfo, const char **attrs) {
-            for (; *attrs; attrs += 2) {
-                int b = get_bool(attrs[0], attrs[1]);
-                if (b < 0)
-                    continue;
-                pInfo->no_sclk_boost = !b;
-            }
-        }
-};
 // These externs are necessary so that we can have circular parent/children
 // pointers.
 extern XmlElementBootBoost xml_boot_boost;
@@ -489,7 +474,6 @@ extern XmlElementHintOnlineCpus xml_hint_online_cpus;
 extern XmlElementHints xml_hints;
 extern XmlElementInput xml_input;
 extern XmlElementInputDevices xml_input_devices;
-extern XmlElementSclkBoost xml_sclk_boost;
 extern XmlElementTop xml_top;
 
 // These must be defined in bottom-to-top order, so that .name() will work
@@ -521,14 +505,12 @@ XmlElementInputDevices xml_input_devices(&xml_top, {
                 });
 XmlElementBootBoost xml_boot_boost(&xml_top, {});
 XmlElementCpufreqInteractive xml_cpufreq_interactive(&xml_top, {});
-XmlElementSclkBoost xml_sclk_boost(&xml_top, {});
 XmlElementTop xml_top(NULL, {
                 {xml_boot_boost.name(), &xml_boot_boost},
                 {xml_cpu_cluster.name(), &xml_cpu_cluster},
                 {xml_cpufreq_interactive.name(), &xml_cpufreq_interactive},
                 {xml_hints.name(), &xml_hints},
-                {xml_input_devices.name(), &xml_input_devices},
-                {xml_sclk_boost.name(), &xml_sclk_boost}
+                {xml_input_devices.name(), &xml_input_devices}
                 });
 }
 

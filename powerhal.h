@@ -94,7 +94,6 @@ struct powerhal_info {
 
     bool ftrace_enable;
     bool no_cpufreq_interactive;
-    bool no_sclk_boost;
 
     /* Holds input devices */
     std::vector<struct input_dev_map> input_devs;
