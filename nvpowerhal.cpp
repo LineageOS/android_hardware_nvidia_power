@@ -583,9 +583,6 @@ void common_power_set_interactive(struct powerhal_info *pInfo, int on)
     if (!pInfo)
         return;
 
-    if (!pInfo->no_sclk_boost)
-        sysfs_write("/sys/devices/platform/host1x/nvavp/boost_sclk", state);
-
     for (auto &input_dev : pInfo->input_devs) {
         if (input_dev.dev_id < 0)
             continue;

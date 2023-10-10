@@ -50,8 +50,6 @@ Power::Power() {
     pInfo->input_devs.push_back({-1, "touch\n"});
     pInfo->input_devs.push_back({-1, "raydium_ts\n"});
 
-    pInfo->no_sclk_boost = true;
-
     common_power_init(pInfo);
 }
 
