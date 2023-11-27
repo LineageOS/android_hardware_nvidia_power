@@ -19,7 +19,7 @@
 
 // #define LOG_NDEBUG 0
 
-#define FOSTER_E_HDD    "/dev/block/sda"
+#define SATA_POWER_CONTROL_PATH "/sys/devices/tegra-sata.0/ata1/power/control"
 #define HDD_STANDBY_TIMEOUT     60
 
 #include <android/log.h>
@@ -70,7 +70,7 @@ Return<void> Power::setInteractive(bool interactive)  {
     set_power_level_floor(interactive);
 #endif
 
-    if (!access(FOSTER_E_HDD, F_OK)) {
+    if (!access(SATA_POWER_CONTROL_PATH, F_OK)) {
         /*
         * Turn-off Foster HDD at display off
         */
